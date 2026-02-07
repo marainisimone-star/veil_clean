@@ -130,6 +130,20 @@ class ConversationStore {
     await _save(next);
   }
 
+  Future<void> setUnreadCount({
+    required String conversationId,
+    required int unreadCount,
+  }) async {
+    final all = await _getAll();
+
+    final next = all.map((c) {
+      if (c.id != conversationId) return c;
+      return c.copyWith(unreadCount: unreadCount);
+    }).toList(growable: false);
+
+    await _save(next);
+  }
+
   Future<void> removeConversation(String conversationId) async {
     final all = await _getAll();
     final next = all.where((c) => c.id != conversationId).toList(growable: false);
@@ -189,6 +203,20 @@ class ConversationStore {
     final next = all.map((c) {
       if (c.id != conversationId) return c;
       return c.copyWith(isHidden: hidden);
+    }).toList(growable: false);
+
+    await _save(next);
+  }
+
+  Future<void> setArchived({
+    required String conversationId,
+    required bool archived,
+  }) async {
+    final all = await _getAll();
+
+    final next = all.map((c) {
+      if (c.id != conversationId) return c;
+      return c.copyWith(isArchived: archived);
     }).toList(growable: false);
 
     await _save(next);

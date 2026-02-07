@@ -392,7 +392,19 @@ class MessageRepository {
   Future<CoverStyle> _getCoverStyle(String conversationId) async {
     try {
       final c = await _convs.getById(conversationId);
-      return c?.coverStyle ?? CoverStyle.private;
+      if (c == null) return CoverStyle.private;
+      final contact = await _contactForConversation(c);
+      if (contact != null) {
+        switch (contact.coverStyleOverride) {
+          case CoverStyleOverride.business:
+            return CoverStyle.business;
+          case CoverStyleOverride.private:
+            return CoverStyle.private;
+          case CoverStyleOverride.auto:
+            break;
+        }
+      }
+      return c.coverStyle;
     } catch (_) {
       return CoverStyle.private;
     }

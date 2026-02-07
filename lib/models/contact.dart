@@ -8,6 +8,12 @@ enum ContactCategory {
   business,
 }
 
+enum CoverStyleOverride {
+  auto,
+  private,
+  business,
+}
+
 ContactCategory _categoryFromString(String? s) {
   switch ((s ?? '').toLowerCase()) {
     case 'business':
@@ -20,6 +26,29 @@ ContactCategory _categoryFromString(String? s) {
 
 String _categoryToString(ContactCategory c) {
   return (c == ContactCategory.business) ? 'business' : 'private';
+}
+
+CoverStyleOverride _coverStyleFromString(String? s) {
+  switch ((s ?? '').toLowerCase()) {
+    case 'business':
+      return CoverStyleOverride.business;
+    case 'private':
+      return CoverStyleOverride.private;
+    case 'auto':
+    default:
+      return CoverStyleOverride.auto;
+  }
+}
+
+String _coverStyleToString(CoverStyleOverride c) {
+  switch (c) {
+    case CoverStyleOverride.business:
+      return 'business';
+    case CoverStyleOverride.private:
+      return 'private';
+    case CoverStyleOverride.auto:
+      return 'auto';
+  }
 }
 
 ContactMode _modeFromString(String? s) {
@@ -43,6 +72,7 @@ class Contact {
   final String coverName;
   final ContactMode mode;
   final ContactCategory category;
+  final CoverStyleOverride coverStyleOverride;
 
   final String? coverEmoji;
   final String? firstName;
@@ -53,12 +83,14 @@ class Contact {
   final String? email;
   final String? address;
   final String? photoB64;
+  final bool favorite;
 
   const Contact({
     required this.id,
     required this.coverName,
     required this.mode,
     required this.category,
+    this.coverStyleOverride = CoverStyleOverride.auto,
     this.coverEmoji,
     this.firstName,
     this.lastName,
@@ -68,6 +100,7 @@ class Contact {
     this.email,
     this.address,
     this.photoB64,
+    this.favorite = false,
   });
 
   Contact copyWith({
@@ -75,6 +108,7 @@ class Contact {
     String? coverName,
     ContactMode? mode,
     ContactCategory? category,
+    CoverStyleOverride? coverStyleOverride,
     String? coverEmoji,
     String? firstName,
     String? lastName,
@@ -84,12 +118,14 @@ class Contact {
     String? email,
     String? address,
     String? photoB64,
+    bool? favorite,
   }) {
     return Contact(
       id: id ?? this.id,
       coverName: coverName ?? this.coverName,
       mode: mode ?? this.mode,
       category: category ?? this.category,
+      coverStyleOverride: coverStyleOverride ?? this.coverStyleOverride,
       coverEmoji: coverEmoji ?? this.coverEmoji,
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
@@ -99,6 +135,7 @@ class Contact {
       email: email ?? this.email,
       address: address ?? this.address,
       photoB64: photoB64 ?? this.photoB64,
+      favorite: favorite ?? this.favorite,
     );
     }
 
@@ -107,6 +144,7 @@ class Contact {
         'coverName': coverName,
         'mode': _modeToString(mode),
         'category': _categoryToString(category),
+        'coverStyle': _coverStyleToString(coverStyleOverride),
         'coverEmoji': coverEmoji,
         'firstName': firstName,
         'lastName': lastName,
@@ -116,6 +154,7 @@ class Contact {
         'email': email,
         'address': address,
         'photoB64': photoB64,
+        'favorite': favorite,
       };
 
   static Contact fromJson(Map<String, dynamic> j) {
@@ -127,6 +166,7 @@ class Contact {
       coverName: (j['coverName'] ?? '').toString(),
       mode: _modeFromString(j['mode']?.toString()),
       category: _categoryFromString(j['category']?.toString()),
+      coverStyleOverride: _coverStyleFromString(j['coverStyle']?.toString()),
       coverEmoji: (j['coverEmoji']?.toString().trim().isEmpty ?? true)
           ? null
           : j['coverEmoji']?.toString(),
@@ -154,6 +194,7 @@ class Contact {
       photoB64: (j['photoB64']?.toString().trim().isEmpty ?? true)
           ? null
           : j['photoB64']?.toString(),
+      favorite: (j['favorite'] == true),
     );
   }
 }

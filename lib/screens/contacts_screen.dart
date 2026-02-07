@@ -205,6 +205,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
       coverEmoji: null,
       mode: ContactMode.plain,
       category: ContactCategory.private,
+      coverStyleOverride: CoverStyleOverride.auto,
+      favorite: false,
       firstName: null,
       lastName: null,
       email: null,
@@ -470,6 +472,8 @@ class _EditContactDialogState extends State<_EditContactDialog> {
 
   late ContactMode _mode;
   late ContactCategory _category;
+  late CoverStyleOverride _coverStyleOverride;
+  late bool _favorite;
   String? _photoB64;
 
   bool _saving = false;
@@ -491,6 +495,8 @@ class _EditContactDialogState extends State<_EditContactDialog> {
 
     _mode = c.mode;
     _category = c.category;
+    _coverStyleOverride = c.coverStyleOverride;
+    _favorite = c.favorite;
     _photoB64 = c.photoB64;
   }
 
@@ -524,6 +530,8 @@ class _EditContactDialogState extends State<_EditContactDialog> {
       lastName: last.isEmpty ? null : last,
       mode: _mode,
       category: _category,
+      coverStyleOverride: _coverStyleOverride,
+      favorite: _favorite,
       realName: _realNameCtrl.text.trim().isEmpty ? null : _realNameCtrl.text.trim(),
       realEmoji:
           _realEmojiCtrl.text.trim().isEmpty ? null : _realEmojiCtrl.text.trim(),
@@ -619,6 +627,16 @@ class _EditContactDialogState extends State<_EditContactDialog> {
       (m == ContactMode.dualHidden) ? 'Active' : 'Not active';
   String _catLabel(ContactCategory c) =>
       (c == ContactCategory.business) ? 'Business' : 'Private';
+  String _coverStyleLabel(CoverStyleOverride c) {
+    switch (c) {
+      case CoverStyleOverride.business:
+        return 'Business';
+      case CoverStyleOverride.private:
+        return 'Private';
+      case CoverStyleOverride.auto:
+        return 'Automatic';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -700,6 +718,34 @@ class _EditContactDialogState extends State<_EditContactDialog> {
                           _category = v ?? ContactCategory.private;
                         }),
                 decoration: const InputDecoration(labelText: 'Category'),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<CoverStyleOverride>(
+                key: ValueKey('cover_${_coverStyleOverride.name}'),
+                initialValue: _coverStyleOverride,
+                items: CoverStyleOverride.values
+                    .map(
+                      (c) => DropdownMenuItem(
+                        value: c,
+                        child: Text(_coverStyleLabel(c)),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: _saving
+                    ? null
+                    : (v) => setState(() {
+                          _coverStyleOverride = v ?? CoverStyleOverride.auto;
+                        }),
+                decoration:
+                    const InputDecoration(labelText: 'Cover style (decoy tone)'),
+              ),
+              const SizedBox(height: 10),
+              SwitchListTile(
+                value: _favorite,
+                onChanged: _saving ? null : (v) => setState(() => _favorite = v),
+                title: const Text('Favorite contact'),
+                subtitle: const Text('Show at top of inbox.'),
+                contentPadding: EdgeInsets.zero,
               ),
               const SizedBox(height: 12),
               Row(

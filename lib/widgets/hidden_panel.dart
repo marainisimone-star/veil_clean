@@ -142,13 +142,15 @@ class HiddenPanel {
     if (ok) {
       await unlock.resetHiddenPanelFailures();
     } else if (!bioSupported) {
+      if (!context.mounted) return false;
+      final messenger = ScaffoldMessenger.of(context);
       await unlock.recordHiddenPanelFailure();
       if (!context.mounted) return false;
       final locked = await unlock.isHiddenPanelLocked();
-      if (locked && context.mounted) {
+      if (locked) {
         final until = await unlock.hiddenPanelLockedUntil();
         final mins = _minutesRemaining(until);
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text(
               mins > 0
@@ -2010,16 +2012,15 @@ class _PanelSheetState extends State<_PanelSheet> {
     }
 
     _IncomingTest? res;
+    Contact? selected = contacts.isNotEmpty ? contacts.first : null;
+    String query = '';
+    String message = '';
+    bool sendToHidden = false;
+
     final picked = await showDialog<_IncomingTest>(
       context: context,
       barrierDismissible: true,
       builder: (dctx) {
-        Contact? selected =
-            contacts.isNotEmpty ? contacts.first : null;
-        String query = '';
-        String message = '';
-        bool sendToHidden = false;
-
         List<Contact> filterItems() {
           final q = query.trim().toLowerCase();
           if (q.isEmpty) return contacts;
@@ -2161,6 +2162,9 @@ class _PanelSheetState extends State<_PanelSheet> {
       authorId: 'c_${contact.id}',
       authorName: contact.coverName.isEmpty ? 'Contact' : contact.coverName,
     );
+    if (res.hidden) {
+      await _convs.setHidden(conversationId: conv.id, hidden: true);
+    }
     await NotificationService.I.showTestNotification(
       sender: contact.coverName.isEmpty ? null : contact.coverName,
       hidden: res.hidden,

@@ -37,6 +37,7 @@ class _InboxScreenState extends State<InboxScreen> {
 
   static const String _kHiddenView = 'veil_inbox_hidden_view_v1';
   bool _showHidden = false;
+  bool _showArchived = false;
   UnlockProfile _unlockProfile = UnlockProfile.defaults();
 
   @override
@@ -65,7 +66,10 @@ class _InboxScreenState extends State<InboxScreen> {
   Future<void> _setViewMode(bool hidden) async {
     await LocalStorage.setString(_kHiddenView, hidden ? '1' : '0');
     if (!mounted) return;
-    setState(() => _showHidden = hidden);
+    setState(() {
+      _showHidden = hidden;
+      _showArchived = false;
+    });
     await _reload();
   }
 
@@ -222,6 +226,31 @@ class _InboxScreenState extends State<InboxScreen> {
     if (overlay is! RenderBox) return;
 
     final items = <PopupMenuEntry<String>>[
+      if (c.unreadCount == 0)
+        const PopupMenuItem<String>(
+          value: 'unread',
+          child: Text('Mark as unread'),
+        ),
+      if (!c.isHidden)
+        const PopupMenuItem<String>(
+          value: 'hide',
+          child: Text('Move to hidden inbox'),
+        )
+      else
+        const PopupMenuItem<String>(
+          value: 'unhide',
+          child: Text('Move to main inbox'),
+        ),
+      if (!c.isArchived)
+        const PopupMenuItem<String>(
+          value: 'archive',
+          child: Text('Archive'),
+        )
+      else
+        const PopupMenuItem<String>(
+          value: 'unarchive',
+          child: Text('Unarchive'),
+        ),
       const PopupMenuItem<String>(
         value: 'delete',
         child: Text('Delete'),
@@ -246,65 +275,109 @@ class _InboxScreenState extends State<InboxScreen> {
       items: items,
     );
 
+    if (chosen == 'unread') {
+      await _store.setUnreadCount(conversationId: c.id, unreadCount: 1);
+      if (!mounted) return;
+      await _reload();
+      return;
+    }
+    if (chosen == 'hide') {
+      await _store.setHidden(conversationId: c.id, hidden: true);
+      if (!mounted) return;
+      await _reload();
+      return;
+    }
     if (chosen == 'unhide') {
       await _store.setHidden(conversationId: c.id, hidden: false);
       if (!mounted) return;
       await _reload();
       return;
     }
-
+    if (chosen == 'archive') {
+      await _store.setArchived(conversationId: c.id, archived: true);
+      if (!mounted) return;
+      await _reload();
+      return;
+    }
+    if (chosen == 'unarchive') {
+      await _store.setArchived(conversationId: c.id, archived: false);
+      if (!mounted) return;
+      await _reload();
+      return;
+    }
     if (chosen == 'delete') {
       await _confirmDelete(c);
     }
   }
 
   Future<void> _showConversationMenuSimple(Conversation c) async {
-    if (_showHidden) {
-      final chosen = await showDialog<String>(
-        context: context,
-        builder: (dctx) => AlertDialog(
-          title: const Text('Conversation'),
-          content: Text('What do you want to do with "${c.title}"?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dctx, null),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(dctx, 'unhide'),
-              child: const Text('Move to main inbox'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(dctx, 'delete'),
-              child: const Text('Delete'),
-            ),
-          ],
-        ),
-      );
-      if (chosen == 'unhide') {
-        await _store.setHidden(conversationId: c.id, hidden: false);
-        if (!mounted) return;
-        await _reload();
-        return;
-      }
-      if (chosen == 'delete') {
-        await _confirmDelete(c);
-      }
-      return;
-    }
-
-    final ok = await showDialog<bool>(
+    final chosen = await showDialog<String>(
       context: context,
       builder: (dctx) => AlertDialog(
         title: const Text('Conversation'),
-        content: Text('Delete "${c.title}"?'),
+        content: Text('What do you want to do with "${c.title}"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(dctx, true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, null),
+            child: const Text('Cancel'),
+          ),
+          if (c.unreadCount == 0)
+            TextButton(
+              onPressed: () => Navigator.pop(dctx, 'unread'),
+              child: const Text('Mark as unread'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(
+              dctx,
+              c.isHidden ? 'unhide' : 'hide',
+            ),
+            child: Text(c.isHidden ? 'Move to main inbox' : 'Move to hidden inbox'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(
+              dctx,
+              c.isArchived ? 'unarchive' : 'archive',
+            ),
+            child: Text(c.isArchived ? 'Unarchive' : 'Archive'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, 'delete'),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
-    if (ok == true) {
+    if (chosen == 'unread') {
+      await _store.setUnreadCount(conversationId: c.id, unreadCount: 1);
+      if (!mounted) return;
+      await _reload();
+      return;
+    }
+    if (chosen == 'hide') {
+      await _store.setHidden(conversationId: c.id, hidden: true);
+      if (!mounted) return;
+      await _reload();
+      return;
+    }
+    if (chosen == 'unhide') {
+      await _store.setHidden(conversationId: c.id, hidden: false);
+      if (!mounted) return;
+      await _reload();
+      return;
+    }
+    if (chosen == 'archive') {
+      await _store.setArchived(conversationId: c.id, archived: true);
+      if (!mounted) return;
+      await _reload();
+      return;
+    }
+    if (chosen == 'unarchive') {
+      await _store.setArchived(conversationId: c.id, archived: false);
+      if (!mounted) return;
+      await _reload();
+      return;
+    }
+    if (chosen == 'delete') {
       await _confirmDelete(c);
     }
   }
@@ -312,7 +385,10 @@ class _InboxScreenState extends State<InboxScreen> {
   List<Conversation> _filter(List<Conversation> all) {
     final q = _searchCtrl.text.trim().toLowerCase();
 
-    final scoped = all.where((c) => c.isHidden == _showHidden).toList(growable: false);
+    final scoped = all
+        .where((c) => c.isHidden == _showHidden)
+        .where((c) => _showArchived ? c.isArchived : !c.isArchived)
+        .toList(growable: false);
 
     if (q.isEmpty) return scoped;
 
@@ -331,14 +407,34 @@ class _InboxScreenState extends State<InboxScreen> {
     final cardBg = scheme.surface;
     final border = scheme.outlineVariant.withAlpha((0.45 * 255).round());
 
-    return BackgroundScaffold(
-      style: VeilBackgroundStyle.inbox,
-      appBar: AppBar(
+    return PopScope(
+      canPop: !_showArchived,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (_showArchived) {
+          setState(() => _showArchived = false);
+        }
+      },
+      child: BackgroundScaffold(
+        style: VeilBackgroundStyle.inbox,
+        appBar: AppBar(
+          leading: _showArchived
+              ? TextButton(
+                  onPressed: () => setState(() => _showArchived = false),
+                  child: Text('Back', style: TextStyle(color: fg)),
+                )
+              : null,
         title: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onDoubleTap: _openHiddenPanel,
           child: Builder(
             builder: (ctx) {
+              if (_showArchived) {
+                return Text(
+                  'Archived',
+                  style: TextStyle(color: fg, fontWeight: FontWeight.w600),
+                );
+              }
               return TextButton(
                 onPressed: () {},
                 child: Stack(
@@ -371,10 +467,15 @@ class _InboxScreenState extends State<InboxScreen> {
           ),
         ),
         actions: [
-          if (_showHidden)
+          if (_showHidden && !_showArchived)
             TextButton(
               onPressed: () => _setViewMode(false),
               child: Text('Inbox', style: TextStyle(color: fg)),
+            ),
+          if (!_showArchived)
+            TextButton(
+              onPressed: () => setState(() => _showArchived = true),
+              child: Text('Archived', style: TextStyle(color: fg)),
             ),
           TextButton(
             onPressed: () {
@@ -403,7 +504,18 @@ class _InboxScreenState extends State<InboxScreen> {
           FutureBuilder<List<Conversation>>(
             future: _future,
             builder: (context, snap) {
-              final items = _filter(snap.data ?? const <Conversation>[]);
+              final all = snap.data ?? const <Conversation>[];
+              final items = _filter(all);
+              final byContact = <String, Conversation>{};
+              for (final c in all) {
+                final cid = c.contactId;
+                if (cid == null || cid.trim().isEmpty) continue;
+                byContact[cid] = c;
+              }
+              final favoriteContacts = _contactsById.values
+                  .where((c) => c.favorite)
+                  .toList(growable: false)
+                ..sort((a, b) => a.coverName.toLowerCase().compareTo(b.coverName.toLowerCase()));
 
               if (snap.connectionState == ConnectionState.waiting && items.isEmpty) {
                 return const Center(child: CircularProgressIndicator());
@@ -411,6 +523,114 @@ class _InboxScreenState extends State<InboxScreen> {
 
               return Column(
                 children: [
+                  if (!_showArchived && favoriteContacts.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Favorites',
+                            style: TextStyle(
+                              color: muted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 68,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: favoriteContacts.length,
+                              separatorBuilder: (_, __) => const SizedBox(width: 12),
+                              itemBuilder: (context, index) {
+                                final contact = favoriteContacts[index];
+                                final convo = byContact[contact.id];
+                                final unread = convo?.unreadCount ?? 0;
+                                final title = contact.coverName.trim().isEmpty
+                                    ? (contact.firstName?.trim().isNotEmpty == true
+                                        ? contact.firstName!.trim()
+                                        : 'Contact')
+                                    : contact.coverName.trim();
+                                final avatar = _contactAvatar(contact);
+                                final fallback = (contact.coverEmoji != null &&
+                                        contact.coverEmoji!.trim().isNotEmpty)
+                                    ? contact.coverEmoji!.trim()
+                                    : (title.isEmpty ? '?' : title[0].toUpperCase());
+
+                                return InkWell(
+                                  onTap: () async {
+                                    final conv = convo ??
+                                        await _store.getOrCreateForContact(
+                                          contactId: contact.id,
+                                          fallbackTitle: contact.coverName,
+                                        );
+                                    if (!mounted) return;
+                                    await _openThread(conv);
+                                  },
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Column(
+                                    children: [
+                                      Stack(
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 22,
+                                            backgroundColor:
+                                                scheme.primary.withAlpha((0.12 * 255).round()),
+                                            backgroundImage: avatar,
+                                            child: avatar == null
+                                                ? Text(
+                                                    fallback,
+                                                    style: TextStyle(color: fg, fontSize: 14),
+                                                  )
+                                                : null,
+                                          ),
+                                          if (unread > 0)
+                                            Positioned(
+                                              right: -2,
+                                              top: -2,
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                    horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: scheme.primary,
+                                                  borderRadius: BorderRadius.circular(999),
+                                                ),
+                                                child: Text(
+                                                  unread > 99 ? '99+' : '$unread',
+                                                  style: TextStyle(
+                                                    color: scheme.onPrimary,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      SizedBox(
+                                        width: 68,
+                                        child: Text(
+                                          title,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(color: fg, fontSize: 11),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
                     child: Container(
@@ -437,7 +657,11 @@ class _InboxScreenState extends State<InboxScreen> {
                     child: items.isEmpty
                         ? Center(
                             child: Text(
-                              _showHidden ? 'No hidden conversations.' : 'No conversations yet.',
+                              _showArchived
+                                  ? 'No archived conversations.'
+                                  : (_showHidden
+                                      ? 'No hidden conversations.'
+                                      : 'No conversations yet.'),
                               style: TextStyle(color: muted),
                             ),
                           )
@@ -562,6 +786,7 @@ class _InboxScreenState extends State<InboxScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 }

@@ -77,7 +77,6 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
   final bool _authUiOpen = false;
   bool _hiddenPanelOpen = false;
 
-  bool _pullArmed = true;
   double _pullDistance = 0;
   bool _pullTriggered = false;
   Timer? _pullWheelReset;
@@ -1046,12 +1045,6 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
       }
     }
 
-    if (n.metrics.pixels <= 0) {
-      _pullArmed = true;
-    } else {
-      _pullArmed = false;
-    }
-
     if (n is ScrollStartNotification) {
       _pullDistance = 0;
       _pullTriggered = false;
@@ -1071,8 +1064,6 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
     if (!_unlockProfile.pullDownPanel) return;
     if (_authUiOpen) return;
     if (_hiddenPanelOpen) return;
-    _pullArmed = true;
-
     final dy = details.delta.dy;
     if (dy <= 0) return;
 
@@ -1092,7 +1083,6 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
   void _onPullDragEnd(DragEndDetails details) {
     _pullDistance = 0;
     _pullTriggered = false;
-    _pullArmed = true;
     _markPullDirty();
   }
 
@@ -1113,7 +1103,6 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
     if (!_unlockProfile.pullDownPanel) return;
     if (_authUiOpen || _hiddenPanelOpen) return;
     if (delta <= 0) return;
-    _pullArmed = true;
     _pullDistance = (_pullDistance + delta).clamp(0, 140);
     _markPullDirty();
 

@@ -22,6 +22,9 @@ class Conversation {
   /// Whether this conversation is hidden (decoy inbox)
   final bool isHidden;
 
+  /// Whether this conversation is archived
+  final bool isArchived;
+
   /// Group chat flag
   final bool isGroup;
 
@@ -38,6 +41,7 @@ class Conversation {
     this.coverStyle = CoverStyle.private,
     this.messageTtlMinutes,
     this.isHidden = false,
+    this.isArchived = false,
     this.isGroup = false,
     this.groupMembers = const [],
   });
@@ -51,6 +55,7 @@ class Conversation {
     CoverStyle? coverStyle,
     int? messageTtlMinutes,
     bool? isHidden,
+    bool? isArchived,
     bool? isGroup,
     List<GroupMember>? groupMembers,
   }) {
@@ -64,6 +69,7 @@ class Conversation {
       coverStyle: coverStyle ?? this.coverStyle,
       messageTtlMinutes: messageTtlMinutes ?? this.messageTtlMinutes,
       isHidden: isHidden ?? this.isHidden,
+      isArchived: isArchived ?? this.isArchived,
       isGroup: isGroup ?? this.isGroup,
       groupMembers: groupMembers ?? this.groupMembers,
     );
@@ -80,6 +86,7 @@ class Conversation {
       'coverStyle': coverStyle.name,
       'ttlMinutes': messageTtlMinutes,
       'hidden': isHidden,
+      'archived': isArchived,
       'isGroup': isGroup,
       'members': groupMembers.map((m) => m.toMap()).toList(growable: false),
     };
@@ -99,6 +106,9 @@ class Conversation {
 
     final rawHidden = m['hidden'];
     final isHidden = (rawHidden is bool) ? rawHidden : false;
+
+    final rawArchived = m['archived'];
+    final isArchived = (rawArchived is bool) ? rawArchived : false;
 
     final rawIsGroup = m['isGroup'];
     final isGroup = (rawIsGroup is bool) ? rawIsGroup : false;
@@ -123,6 +133,7 @@ class Conversation {
       coverStyle: style,
       messageTtlMinutes: ttl,
       isHidden: isHidden,
+      isArchived: isArchived,
       isGroup: isGroup,
       groupMembers: members,
     );
