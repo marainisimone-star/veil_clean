@@ -1,0 +1,51 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Calibri;}}
+\fs24
+\b Veil Clean ? Flussi Logici dell?App\b0\par
+\par
+\b 1. Avvio e Routing\b0\par
+- main.dart inizializza LocalStorage, NotificationService e window_manager, poi avvia l?app.\par
+- AppRouter gestisce tutte le rotte e imposta GateScreen come fallback.\par
+\par
+\b 2. Gate / Sicurezza Iniziale\b0\par
+- GateScreen decide il flusso iniziale: panic, lock, onboarding o inbox.\par
+- Se panic globale attivo: va a PanicLockScreen.\par
+- Se setup completato e PIN presente:\par
+  ? se richiede unlock: va a LockScreen\par
+  ? altrimenti: sblocca sessione e va a Inbox\par
+- Se setup non completato: va a OnboardingScreen.\par
+\par
+\b 3. Lock / Owner Auth\b0\par
+- LockScreen tenta biometria (OwnerAuthFlow).\par
+- Se biometria non disponibile o fallisce: fallback a PIN (UnlockService).\par
+- In caso di successo: SecureGate sblocca la sessione e si entra in Inbox.\par
+\par
+\b 4. Flusso Inbox ? Thread\b0\par
+- InboxScreen mostra conversazioni (ConversationStore).\par
+- Apertura ThreadScreen con Conversation come argomento.\par
+\par
+\b 5. Messaggi (Cover + Cifratura)\b0\par
+- MessageRepository decide se la chat ? covert.\par
+- Se covert: genera cover text (CoverAiService) e cifra il testo reale (CryptoService).\par
+- Se non covert: cover = testo reale in chiaro.\par
+- Aggiorna preview e lastMessage in ConversationStore.\par
+\par
+\b 6. Reveal del Testo Reale\b0\par
+- revealRealText usa CryptoService.decrypt.\par
+- decrypt ? protetto da SecureGate (sessione sbloccata + conversazione sbloccata).\par
+\par
+\b 7. Backup / Import\b0\par
+- BackupService esporta contatti, conversazioni e messaggi in JSON.\par
+- Import con merge intelligente o replace.\par
+\par
+\b 8. Allegati\b0\par
+- AttachmentStore cifra allegati e li salva in LocalStorage.\par
+- Apertura: decrypt, salvataggio temporaneo, apertura OS, wipe best-effort.\par
+\par
+\b 9. Notifiche\b0\par
+- NotificationService integra FCM e mostra notifiche locali.\par
+\par
+\b 10. Panic e Sessione Sicura\b0\par
+- PanicController wipe delle chiavi in RAM (SecureSession).\par
+- SecureGate blocca operazioni critiche durante panic o sessione lockata.\par
+}

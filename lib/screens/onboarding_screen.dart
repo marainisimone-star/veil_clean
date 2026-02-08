@@ -22,6 +22,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   static const String _kSetupDone = 'veil_setup_done_v1';
   static const String _kOwnerName = 'veil_owner_name_v1';
   static const String _kOwnerPhoto = 'veil_owner_photo_b64_v1';
+  static const String _kOwnerPhone = 'veil_owner_phone_v1';
 
   final _unlock = UnlockService();
   final _contacts = ContactRepository();
@@ -50,12 +51,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       if (!mounted) return;
       final profile = await UnlockProfile.load();
       final requireUnlock = await _unlock.isAppUnlockRequired();
+      final ownerName = LocalStorage.getString(_kOwnerName) ?? '';
+      final ownerPhone = LocalStorage.getString(_kOwnerPhone) ?? '';
+      final ownerPhoto = LocalStorage.getString(_kOwnerPhoto);
       if (!mounted) return;
       setState(() {
         _hasExistingPin = has;
         _unlockProfile = profile;
         _requireAppUnlock = requireUnlock;
+        _ownerPhotoB64 = (ownerPhoto == null || ownerPhoto.trim().isEmpty)
+            ? null
+            : ownerPhoto.trim();
       });
+      _ownerNameCtrl.text = ownerName;
+      _phoneCtrl.text = ownerPhone;
     } catch (_) {
       if (!mounted) return;
       setState(() => _hasExistingPin = false);
@@ -124,6 +133,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await _unlockProfile.save();
       await _unlock.setAppUnlockRequired(_requireAppUnlock);
       await LocalStorage.setString(_kOwnerName, ownerName);
+      await LocalStorage.setString(_kOwnerPhone, phone);
       if (_ownerPhotoB64 != null && _ownerPhotoB64!.trim().isNotEmpty) {
         await LocalStorage.setString(_kOwnerPhoto, _ownerPhotoB64!.trim());
       } else {
@@ -132,7 +142,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await LocalStorage.setString(_kSetupDone, '1');
 
       if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.lock, (r) => false);
+      if (_requireAppUnlock) {
+        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.lock, (r) => false);
+      } else {
+        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.inbox, (r) => false);
+      }
     } catch (_) {
       _toast('Done.');
     } finally {

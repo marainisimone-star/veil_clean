@@ -14,6 +14,7 @@ import '../routes/app_routes.dart';
 import '../screens/hidden_panel.dart';
 import '../security/unlock_profile.dart';
 import '../widgets/background_scaffold.dart';
+import '../widgets/bottom_nav_strip.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -62,6 +63,7 @@ class _InboxScreenState extends State<InboxScreen> {
     if (!mounted) return;
     setState(() => _unlockProfile = profile);
   }
+
 
   Future<void> _setViewMode(bool hidden) async {
     await LocalStorage.setString(_kHiddenView, hidden ? '1' : '0');
@@ -124,6 +126,8 @@ class _InboxScreenState extends State<InboxScreen> {
       setState(() => _hiddenUnreadCount = 0);
     }
   }
+
+  
 
   void _subscribeMessages() {
     _sub = _msgs.events.listen((event) {
@@ -435,32 +439,46 @@ class _InboxScreenState extends State<InboxScreen> {
                   style: TextStyle(color: fg, fontWeight: FontWeight.w600),
                 );
               }
-              return TextButton(
-                onPressed: () {},
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Text(
-                        _showHidden ? 'Hidden' : 'Inbox',
-                        style: TextStyle(color: fg),
-                      ),
-                    ),
-                    if (!_showHidden && _hiddenUnreadCount > 0)
-                      Positioned(
-                        right: 0,
-                        top: -2,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: scheme.primary,
-                            shape: BoxShape.circle,
+              return SizedBox(
+                width: 96,
+                child: TextButton(
+                  onPressed: () {},
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Center(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              _showHidden ? 'Hidden' : 'Inbox',
+                              style: TextStyle(color: fg),
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
                       ),
-                  ],
+                      if (!_showHidden && _hiddenUnreadCount > 0)
+                        Positioned(
+                          right: 0,
+                          top: -2,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: scheme.primary,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               );
             },
@@ -468,25 +486,45 @@ class _InboxScreenState extends State<InboxScreen> {
         ),
         actions: [
           if (_showHidden && !_showArchived)
-            TextButton(
-              onPressed: () => _setViewMode(false),
-              child: Text('Inbox', style: TextStyle(color: fg)),
+            SizedBox(
+              width: 72,
+              child: TextButton(
+                onPressed: () => _setViewMode(false),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'Inbox',
+                    style: TextStyle(color: fg),
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
             ),
           if (!_showArchived)
-            TextButton(
-              onPressed: () => setState(() => _showArchived = true),
-              child: Text('Archived', style: TextStyle(color: fg)),
+            SizedBox(
+              width: 84,
+              child: TextButton(
+                onPressed: () => setState(() => _showArchived = true),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'Archived',
+                    style: TextStyle(color: fg),
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
             ),
-          TextButton(
-            onPressed: () {
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                AppRoutes.onboarding,
-                (route) => false,
-              );
-            },
-            child: Text('Onboarding', style: TextStyle(color: fg)),
-          ),
           IconButton(
             tooltip: 'Contacts',
             onPressed: _openContacts,
@@ -499,6 +537,7 @@ class _InboxScreenState extends State<InboxScreen> {
           ),
         ],
       ),
+      bottomNavigationBar: const BottomNavStrip(current: BottomNavTab.chats),
       child: Stack(
         children: [
           FutureBuilder<List<Conversation>>(

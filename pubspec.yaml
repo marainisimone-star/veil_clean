@@ -10,6 +10,8 @@ environment:
 dependencies:
   file_selector: ^1.1.0
   firebase_core: ^3.2.0
+  firebase_auth: ^5.3.4
+  cloud_firestore: ^5.6.3
   firebase_messaging: ^15.0.2
   flutter:
     sdk: flutter
@@ -30,6 +32,14 @@ dependencies:
 
   # Biometrics / PIN fallback (Windows Hello, FaceID, TouchID)
   local_auth: ^3.0.0
+
+  # Attachments / media / location / contacts
+  image_picker: ^1.2.1
+  geolocator: ^14.0.2
+  flutter_contacts: ^1.1.9+2
+  open_filex: ^4.5.0
+  share_plus: ^10.0.2
+  jitsi_meet_flutter_sdk: ^11.6.0
 
 dev_dependencies:
   flutter_test:

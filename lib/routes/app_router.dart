@@ -6,6 +6,7 @@ import '../routes/app_routes.dart';
 import '../screens/gate_screen.dart';
 import '../screens/lock_screen.dart';
 import '../screens/onboarding_screen.dart';
+import '../screens/auth_screen.dart';
 import '../screens/inbox_screen.dart';
 import '../screens/thread_screen.dart';
 import '../screens/contacts_screen.dart';
@@ -26,6 +27,9 @@ class AppRouter {
 
       case AppRoutes.onboarding:
         return MaterialPageRoute(builder: (_) => const OnboardingScreen(), settings: settings);
+
+      case AppRoutes.auth:
+        return MaterialPageRoute(builder: (_) => const AuthScreen(), settings: settings);
 
       case AppRoutes.panic:
         final arg = settings.arguments;

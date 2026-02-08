@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../routes/app_routes.dart';
 import '../widgets/background_scaffold.dart';
+import '../widgets/bottom_nav_strip.dart';
 
 class ComposeScreen extends StatelessWidget {
   const ComposeScreen({super.key});
@@ -12,6 +13,7 @@ class ComposeScreen extends StatelessWidget {
     final muted = scheme.onSurfaceVariant;
     return BackgroundScaffold(
       style: VeilBackgroundStyle.inbox,
+      bottomNavigationBar: const BottomNavStrip(current: BottomNavTab.chats),
       appBar: AppBar(
         title: const Text('Compose'),
       ),

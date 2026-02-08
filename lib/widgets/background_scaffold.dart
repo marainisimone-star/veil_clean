@@ -18,6 +18,7 @@ class BackgroundScaffold extends StatelessWidget {
     required this.child,
     required this.style,
     this.appBar,
+    this.bottomNavigationBar,
     this.padding,
     this.safeArea = true,
   });
@@ -27,6 +28,7 @@ class BackgroundScaffold extends StatelessWidget {
 
   /// FIX V4: ora supporta `appBar:` come uno Scaffold standard.
   final PreferredSizeWidget? appBar;
+  final Widget? bottomNavigationBar;
 
   final EdgeInsetsGeometry? padding;
   final bool safeArea;
@@ -72,6 +74,7 @@ class BackgroundScaffold extends StatelessWidget {
       backgroundColor: const Color(0xFFF6F4F0),
       appBar: appBar,
       body: body,
+      bottomNavigationBar: bottomNavigationBar,
     );
   }
 

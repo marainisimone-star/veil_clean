@@ -7,6 +7,7 @@ import '../data/conversation_store.dart';
 import '../models/contact.dart';
 import '../routes/app_routes.dart';
 import '../widgets/background_scaffold.dart';
+import '../widgets/bottom_nav_strip.dart';
 
 class NewConversationScreen extends StatefulWidget {
   const NewConversationScreen({super.key});
@@ -218,6 +219,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
 
     return BackgroundScaffold(
       style: VeilBackgroundStyle.inbox,
+      bottomNavigationBar: const BottomNavStrip(current: BottomNavTab.chats),
       appBar: AppBar(
         foregroundColor: fg,
         title: Text('New conversation', style: TextStyle(color: fg)),

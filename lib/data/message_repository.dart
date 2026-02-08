@@ -9,9 +9,14 @@ import '../models/conversation.dart';
 import '../models/message.dart';
 import '../services/attachment_store.dart';
 import '../services/cover_ai_service.dart';
+import '../services/firebase_backend.dart';
+import '../services/remote_backend.dart';
 import 'contact_repository.dart';
 import 'conversation_store.dart';
 import 'message_events.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:io';
 
 class MessageRepository {
   static final MessageRepository _instance = MessageRepository._internal();
@@ -49,6 +54,7 @@ class MessageRepository {
     required String text,
     required bool isMe,
     AttachmentRef? attachmentRef,
+    bool? hiddenOverride,
   }) async {
     final now = DateTime.now();
     final msgId = _newId();
@@ -116,6 +122,12 @@ class MessageRepository {
       await _rememberCover(conversationId, cover);
     }
 
+    if (hiddenOverride == true) {
+      await _convs.setHidden(conversationId: conversationId, hidden: true);
+    } else if (hiddenOverride == false && (conv?.isHidden == true)) {
+      await _convs.setHidden(conversationId: conversationId, hidden: false);
+    }
+
     _events.add(MessageEvent(type: MessageEventType.added, message: msg));
 
     await _convs.updateLastMessage(
@@ -124,9 +136,71 @@ class MessageRepository {
       when: now,
     );
 
+    // Best-effort: send to remote backend (cover text only for now).
+    try {
+      final firebaseSupported =
+          kIsWeb ||
+          Platform.isAndroid ||
+          Platform.isIOS ||
+          Platform.isMacOS ||
+          Platform.isWindows;
+      if (firebaseSupported) {
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid != null) {
+          final hiddenFlag = (hiddenOverride == true) || (conv?.isHidden == true);
+          final remote = RemoteMessage(
+            id: msg.id,
+            conversationId: conversationId,
+            senderId: uid,
+            text: cover.trim().isEmpty ? ' ' : cover.trim(),
+            hidden: hiddenFlag,
+            createdAt: now,
+          );
+          await FirebaseBackend.I.sendMessage(remote);
+        }
+      }
+    } catch (_) {}
+
     await Future.delayed(const Duration(milliseconds: 250));
     final updated = msg.copyWith(status: 'sent');
     await _updateMessage(conversationId, updated);
+  }
+
+  /// Ingest a remote message into local storage (cover text only).
+  Future<bool> ingestRemoteMessage(RemoteMessage rm) async {
+    try {
+      final list = await _load(rm.conversationId);
+      if (list.any((m) => m.id == rm.id)) return false;
+
+      final msg = Message(
+        id: rm.id,
+        conversationId: rm.conversationId,
+        coverText: rm.text,
+        real: null,
+        mode: MessageContentMode.plain,
+        isMe: false,
+        timestamp: rm.createdAt,
+        status: 'delivered',
+      );
+
+      final next = [...list, msg];
+      await _save(rm.conversationId, next);
+      _events.add(MessageEvent(type: MessageEventType.added, message: msg));
+
+      await _convs.updateLastMessage(
+        conversationId: rm.conversationId,
+        lastMessage: rm.text.trim().isEmpty ? ' ' : rm.text.trim(),
+        when: rm.createdAt,
+      );
+
+      if (rm.hidden) {
+        await _convs.setHidden(conversationId: rm.conversationId, hidden: true);
+      }
+
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> receiveMessage({
@@ -286,14 +360,18 @@ class MessageRepository {
   // ---------------- Internal persistence ----------------
 
   Future<List<Message>> _load(String conversationId) async {
-    final raw = LocalStorage.getString(_keyMsgs(conversationId));
-    if (raw == null || raw.trim().isEmpty) return const [];
+    try {
+      final raw = LocalStorage.getString(_keyMsgs(conversationId));
+      if (raw == null || raw.trim().isEmpty) return const [];
 
-    final list = (jsonDecode(raw) as List).cast<dynamic>();
-    return list
-        .whereType<Map>()
-        .map((m) => Message.fromMap(m.cast<String, dynamic>()))
-        .toList(growable: false);
+      final list = (jsonDecode(raw) as List).cast<dynamic>();
+      return list
+          .whereType<Map>()
+          .map((m) => Message.fromMap(m.cast<String, dynamic>()))
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<void> _save(String conversationId, List<Message> msgs) async {

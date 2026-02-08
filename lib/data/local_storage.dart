@@ -102,7 +102,8 @@ class LocalStorage {
   static Future<void> _flush() async {
     if (_useSharedPrefs) {
       if (_prefs == null) return;
-      for (final entry in _cache.entries) {
+      final entries = List<MapEntry<String, String>>.from(_cache.entries);
+      for (final entry in entries) {
         await _prefs!.setString(entry.key, entry.value);
       }
       return;
@@ -111,7 +112,8 @@ class LocalStorage {
     if (_file == null) return;
 
     try {
-      final json = jsonEncode(_cache);
+      final snapshot = Map<String, String>.from(_cache);
+      final json = jsonEncode(snapshot);
       await _file!.writeAsString(json, flush: true);
     } catch (_) {
       // Never crash the app because of storage

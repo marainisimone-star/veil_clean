@@ -1433,7 +1433,7 @@ class _PanelSheetState extends State<_PanelSheet> {
                       ),
                     ),
                     SizedBox(
-                      width: 96,
+                      width: 128,
                       height: 36,
                       child: (widget.onToggleInboxView != null)
                           ? OutlinedButton(
@@ -1449,12 +1449,18 @@ class _PanelSheetState extends State<_PanelSheet> {
                                       Navigator.of(context).pop();
                                       widget.onToggleInboxView?.call();
                                     },
-                              child: Text(
-                                (widget.inboxHiddenView == true)
-                                    ? 'Inbox'
-                                    : 'Hidden Inbox',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(fontSize: 11),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  (widget.inboxHiddenView == true)
+                                      ? 'Inbox'
+                                      : 'Hidden Inbox',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 12),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
+                                ),
                               ),
                             )
                           : const SizedBox.shrink(),

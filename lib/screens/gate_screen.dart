@@ -1,10 +1,14 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../data/local_storage.dart';
 import '../routes/app_routes.dart';
 import '../security/biometric_auth_service.dart';
 import '../security/unlock_service.dart';
 import '../security/secure_gate.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class GateScreen extends StatefulWidget {
   const GateScreen({super.key});
@@ -61,6 +65,19 @@ class _GateScreenState extends State<GateScreen> {
     if (!mounted) return;
 
     if (setupDone && hasPin) {
+      final firebaseSupported =
+          kIsWeb ||
+          Platform.isAndroid ||
+          Platform.isIOS ||
+          Platform.isMacOS ||
+          Platform.isWindows;
+      if (firebaseSupported) {
+        final currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser == null) {
+          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.auth, (r) => false);
+          return;
+        }
+      }
       final requireAppUnlock = await unlock.isAppUnlockRequired();
       if (!mounted) return;
       if (requireAppUnlock) {

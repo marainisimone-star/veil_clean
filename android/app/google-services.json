@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "243334561462",
-    "project_id": "vail-48b8f",
-    "storage_bucket": "vail-48b8f.firebasestorage.app"
+    "project_number": "282295694957",
+    "project_id": "vail-clean",
+    "storage_bucket": "vail-clean.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:243334561462:android:0e6b8e67e4cb8b1c723017",
+        "mobilesdk_app_id": "1:282295694957:android:c3bd604b12db2472b2f164",
         "android_client_info": {
           "package_name": "com.example.veil_clean"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDfokNZ50RhkA34gfkvBrSng0_vhDSWiCI"
+          "current_key": "AIzaSyBVeDqTHqppIBxx_PDvdAFQzn6GT3tG_ME"
         }
       ],
       "services": {

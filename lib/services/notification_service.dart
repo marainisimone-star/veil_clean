@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../firebase_options.dart';
 import '../data/local_storage.dart';
 
 class NotificationService {
@@ -27,7 +28,9 @@ class NotificationService {
 
     if (Platform.isAndroid || Platform.isIOS) {
       try {
-        await Firebase.initializeApp();
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
       } catch (_) {}
     }
 
@@ -177,7 +180,9 @@ class NotificationService {
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (Platform.isAndroid || Platform.isIOS) {
     try {
-      await Firebase.initializeApp();
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
     } catch (_) {}
   }
   await NotificationService.I._showLocalForMessage(message);

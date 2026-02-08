@@ -239,16 +239,20 @@ class ConversationStore {
   // ---------------- INTERNAL PERSISTENCE ----------------
 
   Future<List<Conversation>> _getAll() async {
-    final raw = LocalStorage.getString(_kAll);
-    if (raw == null || raw.trim().isEmpty) return const [];
+    try {
+      final raw = LocalStorage.getString(_kAll);
+      if (raw == null || raw.trim().isEmpty) return const [];
 
-    final list = (jsonDecode(raw) as List).cast<dynamic>();
-    final out = list
-        .whereType<Map>()
-        .map((m) => Conversation.fromMap(m.cast<String, dynamic>()))
-        .toList(growable: false);
+      final list = (jsonDecode(raw) as List).cast<dynamic>();
+      final out = list
+          .whereType<Map>()
+          .map((m) => Conversation.fromMap(m.cast<String, dynamic>()))
+          .toList(growable: false);
 
-    return out;
+      return out;
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<void> _save(List<Conversation> list) async {

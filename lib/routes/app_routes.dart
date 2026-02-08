@@ -5,6 +5,7 @@
   static const String gate = '/gate';
   static const String lock = '/lock';
   static const String onboarding = '/onboarding';
+  static const String auth = '/auth';
   static const String panic = '/panic';
 
   // Main

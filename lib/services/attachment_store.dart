@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../crypto/crypto_service.dart';
 import '../data/local_storage.dart';
@@ -51,6 +52,42 @@ class AttachmentStore {
         fileName: fileName,
         byteLength: bytes.length,
         mimeType: mime,
+        createdAt: DateTime.now(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Encrypt raw bytes into CipherPack, persist to LocalStorage,
+  /// return a reference to attach to a message.
+  static Future<AttachmentRef?> importFromBytes({
+    required String conversationId,
+    required List<int> bytes,
+    required String fileName,
+    String? mimeType,
+  }) async {
+    try {
+      if (bytes.isEmpty) return null;
+
+      final safeName = fileName.trim().isNotEmpty ? fileName.trim() : 'file';
+      final b64 = base64Encode(bytes);
+
+      final pack = await CryptoService().encrypt(
+        conversationId: conversationId,
+        plaintext: b64,
+      );
+
+      final attId = _newId();
+
+      final raw = jsonEncode(pack.toMap());
+      await LocalStorage.setString(_key(conversationId, attId), raw);
+
+      return AttachmentRef(
+        id: attId,
+        fileName: safeName,
+        byteLength: bytes.length,
+        mimeType: mimeType,
         createdAt: DateTime.now(),
       );
     } catch (_) {
@@ -171,6 +208,8 @@ class AttachmentStore {
         await Process.start('open', [outPath]);
       } else if (Platform.isLinux) {
         await Process.start('xdg-open', [outPath]);
+      } else if (Platform.isAndroid || Platform.isIOS) {
+        await OpenFilex.open(outPath);
       } else {
         // Unsupported platform: do nothing else
         return;

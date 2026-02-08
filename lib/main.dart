@@ -4,10 +4,15 @@ import 'package:window_manager/window_manager.dart';
 import 'data/local_storage.dart';
 import 'routes/app_router.dart';
 import 'services/notification_service.dart';
+import 'services/firebase_backend.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await LocalStorage.init();
+
+  try {
+    await FirebaseBackend.I.init();
+  } catch (_) {}
 
   try {
     await NotificationService.I.init();

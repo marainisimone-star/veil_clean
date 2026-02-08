@@ -7,6 +7,11 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:jitsi_meet_flutter_sdk/jitsi_meet_flutter_sdk.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../data/conversation_store.dart' as convs;
 import '../data/contact_repository.dart';
@@ -26,6 +31,9 @@ import '../services/attachment_store.dart';
 import '../services/draft_store.dart';
 import '../widgets/background_scaffold.dart';
 import '../widgets/hidden_panel.dart';
+import '../widgets/bottom_nav_strip.dart';
+import '../services/firebase_backend.dart';
+import '../services/remote_backend.dart';
 
 class ThreadScreen extends StatefulWidget {
   final Conversation conversation;
@@ -44,14 +52,17 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
   final _unlock = UnlockService();
   final convs.ConversationStore _convs = convs.ConversationStore();
   final ContactRepository _contactsRepo = ContactRepository();
+  final JitsiMeet _jitsi = JitsiMeet();
 
   final _composerCtrl = TextEditingController();
   final _scrollController = ScrollController();
+  final ImagePicker _imagePicker = ImagePicker();
 
   List<Message> _messages = const [];
   bool _loading = true;
 
   StreamSubscription<MessageEvent>? _sub;
+  StreamSubscription<RemoteMessage>? _remoteSub;
 
   DateTime? _threadUnlockedUntil;
   final Map<String, String> _realCacheByMsgId = {}; // msgId -> real text
@@ -82,6 +93,7 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
   Timer? _pullWheelReset;
 
   AttachmentRef? _pendingAttachment;
+  bool _sendHiddenNext = false;
 
   Timer? _scrollDebounce;
   String? _ownerName;
@@ -110,6 +122,7 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
     _loadOwnerProfile();
     _loadThreadContact();
     _subscribeLive();
+    _subscribeRemote();
   }
 
   @override
@@ -119,6 +132,7 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
     _saveDraftNow();
 
     _sub?.cancel();
+    _remoteSub?.cancel();
     _draftTimer?.cancel();
     _composerCtrl.dispose();
     _scrollController.dispose();
@@ -275,6 +289,15 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
     });
 
     _scheduleScrollToBottom();
+
+    // If remote messages marked hidden, keep conversation hidden state in sync.
+    try {
+      final c = await _convs.getById(widget.conversation.id);
+      if (!mounted) return;
+      if (c?.isHidden == true) {
+        setState(() => _conversationHidden = true);
+      }
+    } catch (_) {}
   }
 
   Future<void> _reload() async {
@@ -306,6 +329,30 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
       }
 
       _scheduleScrollToBottom();
+    });
+  }
+
+  Future<void> _subscribeRemote() async {
+    final firebaseSupported = Platform.isAndroid ||
+        Platform.isIOS ||
+        Platform.isMacOS ||
+        Platform.isWindows;
+    if (!firebaseSupported) return;
+
+    await FirebaseBackend.I.init();
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    _remoteSub = FirebaseBackend.I
+        .messagesStream(conversationId: widget.conversation.id)
+        .listen((rm) async {
+      if (!mounted) return;
+      if (rm.senderId == uid) return;
+
+      final added = await _repo.ingestRemoteMessage(rm);
+      if (!added) return;
+      if (!mounted) return;
+      await _reload();
     });
   }
 
@@ -356,6 +403,100 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
     }
 
     setState(() => _pendingAttachment = att);
+  }
+
+  Future<void> _openAttachmentMenu() async {
+    final scheme = Theme.of(context).colorScheme;
+    final muted = scheme.onSurfaceVariant;
+
+    final selection = await showModalBottomSheet<_AttachAction>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final height = MediaQuery.of(ctx).size.height;
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: height * 0.7),
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.photo_outlined),
+                  title: const Text('Photo'),
+                  onTap: () => Navigator.pop(ctx, _AttachAction.photo),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_library_outlined),
+                  title: const Text('Camera Roll'),
+                  onTap: () => Navigator.pop(ctx, _AttachAction.cameraRoll),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.location_on_outlined),
+                  title: const Text('Location'),
+                  onTap: () => Navigator.pop(ctx, _AttachAction.location),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.person_outline),
+                  title: const Text('Contact'),
+                  onTap: () => Navigator.pop(ctx, _AttachAction.contact),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.share_outlined),
+                  title: const Text('Share Contact'),
+                  onTap: () => Navigator.pop(ctx, _AttachAction.shareContact),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.insert_drive_file_outlined),
+                  title: const Text('Document'),
+                  onTap: () => Navigator.pop(ctx, _AttachAction.document),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.event_outlined),
+                  title: const Text('Calendar Event'),
+                  onTap: () => Navigator.pop(ctx, _AttachAction.calendarEvent),
+                ),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Attachments are encrypted before sending.',
+                    style: TextStyle(color: muted, fontSize: 12),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selection == null) return;
+    switch (selection) {
+      case _AttachAction.photo:
+        await _pickPhotoFromCamera();
+        break;
+      case _AttachAction.cameraRoll:
+        await _pickPhotoFromGallery();
+        break;
+      case _AttachAction.location:
+        await _pickLocation();
+        break;
+      case _AttachAction.contact:
+        await _pickContact();
+        break;
+      case _AttachAction.shareContact:
+        await _shareContactExternally();
+        break;
+      case _AttachAction.document:
+        await _pickAttachment();
+        break;
+      case _AttachAction.calendarEvent:
+        await _pickCalendarEvent();
+        break;
+    }
   }
 
   Future<void> _pickAttachmentFromDownloads() async {
@@ -421,6 +562,513 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
     setState(() => _pendingAttachment = att);
   }
 
+  Future<void> _attachBytes({
+    required List<int> bytes,
+    required String fileName,
+    String? mimeType,
+  }) async {
+    if (bytes.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Empty attachment.')),
+      );
+      return;
+    }
+
+    final att = await AttachmentStore.importFromBytes(
+      conversationId: widget.conversation.id,
+      bytes: bytes,
+      fileName: fileName,
+      mimeType: mimeType,
+    );
+    if (!mounted) return;
+    if (att == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not attach file.')),
+      );
+      return;
+    }
+
+    setState(() => _pendingAttachment = att);
+  }
+
+  String _xFileName(XFile xf, {String fallback = 'file'}) {
+    final name = xf.name.trim();
+    if (name.isNotEmpty) return name;
+    final path = xf.path.trim();
+    if (path.isNotEmpty) {
+      final parts = path.split(Platform.pathSeparator);
+      if (parts.isNotEmpty) return parts.last;
+    }
+    return fallback;
+  }
+
+  Future<void> _pickPhotoFromGallery() async {
+    try {
+      final xf = await _imagePicker.pickImage(source: ImageSource.gallery);
+      if (xf == null) return;
+      final bytes = await xf.readAsBytes();
+      final name = _xFileName(xf, fallback: 'photo.jpg');
+      await _attachBytes(bytes: bytes, fileName: name, mimeType: 'image/jpeg');
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not pick photo.')),
+      );
+    }
+  }
+
+  Future<void> _pickPhotoFromCamera() async {
+    try {
+      bool supported = Platform.isAndroid || Platform.isIOS;
+      try {
+        supported = supported && _imagePicker.supportsImageSource(ImageSource.camera);
+      } catch (_) {}
+
+      if (!supported) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Camera not supported here. Picking from gallery instead.')),
+        );
+        await _pickPhotoFromGallery();
+        return;
+      }
+
+      final xf = await _imagePicker.pickImage(source: ImageSource.camera);
+      if (xf == null) return;
+      final bytes = await xf.readAsBytes();
+      final name = _xFileName(xf, fallback: 'photo.jpg');
+      await _attachBytes(bytes: bytes, fileName: name, mimeType: 'image/jpeg');
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not use camera.')),
+      );
+    }
+  }
+
+  Future<void> _pickLocation() async {
+    try {
+      if (Platform.isWindows || Platform.isLinux) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location is not supported on desktop.')),
+        );
+        return;
+      }
+
+      final enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location services are disabled.')),
+        );
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permission denied.')),
+        );
+        return;
+      }
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+      final ts = DateTime.now();
+      final lat = pos.latitude.toStringAsFixed(6);
+      final lng = pos.longitude.toStringAsFixed(6);
+      final mapUrl = 'https://maps.google.com/?q=$lat,$lng';
+      final body = [
+        'Location: $lat, $lng',
+        'Time: ${ts.toIso8601String()}',
+        'Map: $mapUrl',
+      ].join('\n');
+
+      final fileName = _safeFileName('location_${_timestampSlug(ts)}.txt');
+      await _attachBytes(
+        bytes: utf8.encode(body),
+        fileName: fileName,
+        mimeType: 'text/plain',
+      );
+    } on TimeoutException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location timeout. Try again.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not get location.')),
+      );
+    }
+  }
+
+  Future<void> _pickContact() async {
+    try {
+      final contacts = await _contactsRepo.getAll();
+      if (!mounted) return;
+      if (contacts.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No app contacts found.')),
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      final picked = await _showAppContactPicker(contacts);
+      if (picked == null) return;
+
+      final vcard = _buildVCardFromAppContact(picked);
+      final displayName = _displayNameForAppContact(picked);
+      final fileName = _safeFileName(
+        'contact_${displayName.isEmpty ? 'contact' : displayName}.vcf',
+        fallback: 'contact.vcf',
+      );
+      await _attachBytes(
+        bytes: utf8.encode(vcard),
+        fileName: fileName,
+        mimeType: 'text/x-vcard',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not load app contacts.')),
+      );
+    }
+  }
+
+  Future<void> _shareContactExternally() async {
+    try {
+      final contacts = await _contactsRepo.getAll();
+      if (!mounted) return;
+      if (contacts.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No app contacts found.')),
+        );
+        return;
+      }
+
+      final picked = await _showAppContactPicker(contacts);
+      if (picked == null) return;
+
+      final vcard = _buildVCardFromAppContact(picked);
+      final displayName = _displayNameForAppContact(picked);
+      final fileName = _safeFileName(
+        'contact_${displayName.isEmpty ? 'contact' : displayName}.vcf',
+        fallback: 'contact.vcf',
+      );
+
+      final dir = await Directory.systemTemp.createTemp('veil_share_');
+      final path = '${dir.path}${Platform.pathSeparator}$fileName';
+      final file = File(path);
+      await file.writeAsBytes(utf8.encode(vcard), flush: true);
+
+      await Share.shareXFiles(
+        [XFile(path, mimeType: 'text/x-vcard', name: fileName)],
+        text: displayName.isEmpty ? 'Contact' : displayName,
+      );
+
+      // Best-effort cleanup
+      try {
+        if (await file.exists()) {
+          await file.delete();
+        }
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      } catch (_) {}
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not share contact.')),
+      );
+    }
+  }
+
+  Future<Contact?> _showAppContactPicker(List<Contact> contacts) async {
+    final sorted = List<Contact>.from(contacts)
+      ..sort((a, b) {
+        final ad = _displayNameForAppContact(a).toLowerCase();
+        final bd = _displayNameForAppContact(b).toLowerCase();
+        return ad.compareTo(bd);
+      });
+
+    return showDialog<Contact>(
+      context: context,
+      builder: (ctx) {
+        var filter = '';
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            final filtered = filter.trim().isEmpty
+                ? sorted
+                : sorted
+                    .where((c) =>
+                        _displayNameForAppContact(c).toLowerCase().contains(filter.toLowerCase()))
+                    .toList(growable: false);
+            return AlertDialog(
+              title: const Text('Pick a contact'),
+              content: SizedBox(
+                width: 520,
+                height: 420,
+                child: Column(
+                  children: [
+                    TextField(
+                      decoration: const InputDecoration(
+                        hintText: 'Search',
+                      ),
+                      onChanged: (v) => setLocal(() => filter = v),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (_, i) {
+                          final c = filtered[i];
+                          final displayName = _displayNameForAppContact(c);
+                          return ListTile(
+                            title: Text(displayName.isNotEmpty ? displayName : '(No name)'),
+                            onTap: () => Navigator.pop(ctx, c),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, null),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _displayNameForAppContact(Contact c) {
+    final real = (c.realName ?? '').trim();
+    if (real.isNotEmpty) return real;
+    final first = (c.firstName ?? '').trim();
+    final last = (c.lastName ?? '').trim();
+    final combined = [first, last].where((s) => s.isNotEmpty).join(' ').trim();
+    if (combined.isNotEmpty) return combined;
+    return c.coverName.trim();
+  }
+
+  String _buildVCardFromAppContact(Contact c) {
+    final fullName = _displayNameForAppContact(c);
+    final first = (c.firstName ?? '').trim();
+    final last = (c.lastName ?? '').trim();
+    final phones = <String>[
+      if ((c.phone ?? '').trim().isNotEmpty) c.phone!.trim(),
+    ];
+    final emails = <String>[
+      if ((c.email ?? '').trim().isNotEmpty) c.email!.trim(),
+    ];
+
+    return _buildVCardFromFields(
+      fullName: fullName.isNotEmpty ? fullName : 'Contact',
+      firstName: first,
+      lastName: last,
+      phones: phones,
+      emails: emails,
+    );
+  }
+
+  String _buildVCardFromFields({
+    required String fullName,
+    required String firstName,
+    required String lastName,
+    required List<String> phones,
+    required List<String> emails,
+  }) {
+    final safeFull = _vCardEscape(fullName);
+    final safeFirst = _vCardEscape(firstName);
+    final safeLast = _vCardEscape(lastName);
+
+    final lines = <String>[
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      'FN:$safeFull',
+      'N:$safeLast;$safeFirst;;;',
+    ];
+
+    for (final p in phones) {
+      lines.add('TEL;TYPE=CELL:${_vCardEscape(p)}');
+    }
+    for (final e in emails) {
+      lines.add('EMAIL;TYPE=HOME:${_vCardEscape(e)}');
+    }
+
+    lines.add('END:VCARD');
+    return lines.join('\n');
+  }
+
+  String _vCardEscape(String s) {
+    return s
+        .replaceAll('\\', '\\\\')
+        .replaceAll(';', '\\;')
+        .replaceAll(',', '\\,')
+        .replaceAll('\n', '\\n');
+  }
+
+  Future<void> _pickCalendarEvent() async {
+    final date = await showDatePicker(
+      context: context,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+      initialDate: DateTime.now(),
+    );
+    if (date == null) return;
+
+    if (!mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(DateTime.now().add(const Duration(minutes: 30))),
+    );
+    if (time == null) return;
+
+    if (!mounted) return;
+    final title = await _promptTextInput(title: 'Event title', hint: 'Title');
+    if (title == null || title.trim().isEmpty) return;
+
+    if (!mounted) return;
+    final location = await _promptTextInput(title: 'Location (optional)', hint: 'Location');
+    if (!mounted) return;
+    final notes = await _promptTextInput(title: 'Notes (optional)', hint: 'Notes');
+
+    final start = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final end = start.add(const Duration(hours: 1));
+
+    final ics = _buildIcsEvent(
+      title: title.trim(),
+      start: start,
+      end: end,
+      location: (location ?? '').trim(),
+      notes: (notes ?? '').trim(),
+    );
+
+    final fileName = _safeFileName('event_${_timestampSlug(start)}.ics', fallback: 'event.ics');
+    await _attachBytes(
+      bytes: utf8.encode(ics),
+      fileName: fileName,
+      mimeType: 'text/calendar',
+    );
+  }
+
+  String _buildIcsEvent({
+    required String title,
+    required DateTime start,
+    required DateTime end,
+    String? location,
+    String? notes,
+  }) {
+    final uid = 'veil_${DateTime.now().millisecondsSinceEpoch}@veil';
+    final lines = <String>[
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Veil//EN',
+      'BEGIN:VEVENT',
+      'UID:$uid',
+      'DTSTAMP:${_formatIcsDate(DateTime.now())}',
+      'DTSTART:${_formatIcsDate(start)}',
+      'DTEND:${_formatIcsDate(end)}',
+      'SUMMARY:${_icsEscape(title)}',
+    ];
+    final loc = (location ?? '').trim();
+    if (loc.isNotEmpty) {
+      lines.add('LOCATION:${_icsEscape(loc)}');
+    }
+    final desc = (notes ?? '').trim();
+    if (desc.isNotEmpty) {
+      lines.add('DESCRIPTION:${_icsEscape(desc)}');
+    }
+    lines.add('END:VEVENT');
+    lines.add('END:VCALENDAR');
+    return lines.join('\n');
+  }
+
+  String _formatIcsDate(DateTime dt) {
+    final u = dt.toUtc();
+    final y = u.year.toString().padLeft(4, '0');
+    final m = u.month.toString().padLeft(2, '0');
+    final d = u.day.toString().padLeft(2, '0');
+    final hh = u.hour.toString().padLeft(2, '0');
+    final mm = u.minute.toString().padLeft(2, '0');
+    final ss = u.second.toString().padLeft(2, '0');
+    return '$y$m${d}T$hh$mm${ss}Z';
+  }
+
+  String _icsEscape(String s) {
+    return s
+        .replaceAll('\\', '\\\\')
+        .replaceAll(';', '\\;')
+        .replaceAll(',', '\\,')
+        .replaceAll('\n', '\\n');
+  }
+
+  Future<String?> _promptTextInput({
+    required String title,
+    required String hint,
+  }) async {
+    var value = '';
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dctx) {
+        return AlertDialog(
+          title: Text(title),
+          content: TextField(
+            decoration: InputDecoration(hintText: hint),
+            onChanged: (v) => value = v,
+            onSubmitted: (_) => Navigator.pop(dctx, value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dctx, null),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dctx, value),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _timestampSlug(DateTime dt) {
+    final y = dt.year.toString().padLeft(4, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    return '$y$m${d}_$hh$mm';
+  }
+
+  String _safeFileName(String input, {String fallback = 'file'}) {
+    final base = input.trim();
+    if (base.isEmpty) return fallback;
+    final sanitized = base.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    return sanitized.isEmpty ? fallback : sanitized;
+  }
+
   Future<void> _send() async {
     final text = _composerCtrl.text.trim();
     final att = _pendingAttachment;
@@ -429,6 +1077,8 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
 
     _composerCtrl.clear();
     setState(() => _pendingAttachment = null);
+    final hiddenOverride = _sendHiddenNext;
+    _sendHiddenNext = false;
     await DraftStore.I.clearDraft(conversationId: widget.conversation.id);
 
     await _repo.sendMessage(
@@ -436,6 +1086,7 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
       text: text,
       isMe: true,
       attachmentRef: att,
+      hiddenOverride: hiddenOverride,
     );
 
     try {
@@ -484,6 +1135,43 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
   Future<void> _prefetchAllReal() async {
     for (final m in _messages) {
       await _prefetchRealForMessage(m);
+    }
+  }
+
+  Future<void> _startCall({required bool video}) async {
+    final room = 'veil_${widget.conversation.id}';
+    final displayName = (_ownerName ?? '').trim().isEmpty ? 'Veil User' : _ownerName!.trim();
+    final url = 'https://meet.jit.si/$room';
+
+    if (!(Platform.isAndroid || Platform.isIOS)) {
+      await _openExternalUrl(url);
+      return;
+    }
+
+    final options = JitsiMeetConferenceOptions(
+      room: room,
+      serverURL: 'https://meet.jit.si',
+      userInfo: JitsiMeetUserInfo(displayName: displayName),
+      configOverrides: {
+        'startWithVideoMuted': !video,
+        'startWithAudioMuted': false,
+        'subject': widget.conversation.title.trim().isEmpty
+            ? 'Veil Call'
+            : widget.conversation.title.trim(),
+      },
+      featureFlags: {
+        'welcomepage.enabled': false,
+        'prejoinpage.enabled': true,
+      },
+    );
+
+    try {
+      await _jitsi.join(options);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not start call.')),
+      );
     }
   }
 
@@ -1080,6 +1768,26 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
     }
   }
 
+  Future<void> _openExternalUrl(String url) async {
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Opening call in browser...')),
+      );
+      if (Platform.isWindows) {
+        await Process.start('cmd', ['/c', 'start', '', url], runInShell: true);
+      } else if (Platform.isMacOS) {
+        await Process.start('open', [url]);
+      } else if (Platform.isLinux) {
+        await Process.start('xdg-open', [url]);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open browser.')),
+      );
+    }
+  }
+
   void _onPullDragEnd(DragEndDetails details) {
     _pullDistance = 0;
     _pullTriggered = false;
@@ -1209,6 +1917,7 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
       },
       child: BackgroundScaffold(
         style: VeilBackgroundStyle.thread,
+        bottomNavigationBar: const BottomNavStrip(current: BottomNavTab.chats),
         appBar: AppBar(
           title: GestureDetector(
             behavior: HitTestBehavior.opaque,
@@ -1216,6 +1925,16 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
             child: header,
           ),
           actions: [
+            IconButton(
+              tooltip: 'Call',
+              onPressed: () => _startCall(video: false),
+              icon: const Icon(Icons.call_outlined),
+            ),
+            IconButton(
+              tooltip: 'Video call',
+              onPressed: () => _startCall(video: true),
+              icon: const Icon(Icons.videocam_outlined),
+            ),
             if (_isGroup)
               IconButton(
                 tooltip: 'Members',
@@ -1604,9 +2323,19 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
           Row(
             children: [
               IconButton(
-                tooltip: 'Attach',
-                onPressed: _pickAttachment,
-                icon: Icon(Icons.attach_file, color: muted),
+                tooltip: 'Add',
+                onPressed: _openAttachmentMenu,
+                icon: Icon(Icons.add, color: muted),
+              ),
+              IconButton(
+                tooltip: 'Send to Hidden Inbox',
+                onPressed: () {
+                  setState(() => _sendHiddenNext = !_sendHiddenNext);
+                },
+                icon: Icon(
+                  _sendHiddenNext ? Icons.visibility_off : Icons.visibility_off_outlined,
+                  color: _sendHiddenNext ? Theme.of(context).colorScheme.primary : muted,
+                ),
               ),
               Expanded(
                 child: TextField(
@@ -1654,4 +2383,14 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
 enum _AttachmentPickSource {
   downloads,
   systemPicker,
+}
+
+enum _AttachAction {
+  photo,
+  cameraRoll,
+  location,
+  contact,
+  shareContact,
+  document,
+  calendarEvent,
 }

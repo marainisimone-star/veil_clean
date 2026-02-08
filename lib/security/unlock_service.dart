@@ -109,7 +109,13 @@ class UnlockService {
     if (untilMs == null) return false;
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    return nowMs < untilMs;
+    final ok = nowMs < untilMs;
+    if (ok) {
+      // Keep SecureGate aligned with TTL unlock state.
+      SecureGate.unlockSession();
+      SecureGate.unlockConversation(conversationId);
+    }
+    return ok;
   }
 
   Future<void> unlockConversation(String conversationId) async {

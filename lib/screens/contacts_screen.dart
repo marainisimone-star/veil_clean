@@ -13,6 +13,7 @@ import '../security/biometric_auth_service.dart';
 import '../security/secure_gate.dart';
 import '../security/unlock_service.dart';
 import '../widgets/background_scaffold.dart';
+import '../widgets/bottom_nav_strip.dart';
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
@@ -279,6 +280,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
 
     return BackgroundScaffold(
       style: VeilBackgroundStyle.inbox,
+      bottomNavigationBar: const BottomNavStrip(current: BottomNavTab.contacts),
       appBar: AppBar(
         foregroundColor: fg,
         title: Text('Contacts', style: TextStyle(color: fg)),
