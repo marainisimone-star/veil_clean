@@ -13,23 +13,26 @@ import '../data/message_repository.dart' as msgs;
 import '../models/conversation.dart';
 import '../routes/app_routes.dart';
 import '../services/attachment_store.dart';
+import '../services/external_link_service.dart';
 
 enum BottomNavTab {
   profile,
-  calls,
   chats,
   contacts,
   calendar,
   camera,
+  calls,
 }
 
 class BottomNavStrip extends StatefulWidget {
   const BottomNavStrip({
     super.key,
     required this.current,
+    this.dock,
   });
 
   final BottomNavTab current;
+  final Widget? dock;
 
   @override
   State<BottomNavStrip> createState() => _BottomNavStripState();
@@ -199,11 +202,11 @@ class _BottomNavStripState extends State<BottomNavStrip> {
     );
     if (action == null) return;
 
-    await _startJitsiCall(
-      conversationId: picked.id,
-      title: picked.title,
-      video: action == _CallAction.video,
-    );
+      await _startJitsiCall(
+        conversationId: picked.id,
+        title: picked.title,
+        video: action == _CallAction.video,
+      );
   }
 
   Future<void> _startJitsiCall({
@@ -213,7 +216,11 @@ class _BottomNavStripState extends State<BottomNavStrip> {
   }) async {
     final room = 'veil_$conversationId';
     final displayName = (_ownerName ?? '').trim().isEmpty ? 'Veil User' : _ownerName!.trim();
-    final url = 'https://meet.jit.si/$room';
+    final subject = Uri.encodeComponent(title.trim().isEmpty ? 'Veil Call' : title.trim());
+    final url = 'https://meet.jit.si/$room'
+        '#config.startWithVideoMuted=${video ? 'false' : 'true'}'
+        '&config.startWithAudioMuted=false'
+        '&config.subject=$subject';
 
     if (!(Platform.isAndroid || Platform.isIOS)) {
       await _openExternalUrl(url);
@@ -244,16 +251,9 @@ class _BottomNavStripState extends State<BottomNavStrip> {
   }
 
   Future<void> _openExternalUrl(String url) async {
-    try {
-      _toast('Opening call in browser...');
-      if (Platform.isWindows) {
-        await Process.start('cmd', ['/c', 'start', '', url], runInShell: true);
-      } else if (Platform.isMacOS) {
-        await Process.start('open', [url]);
-      } else if (Platform.isLinux) {
-        await Process.start('xdg-open', [url]);
-      }
-    } catch (_) {
+    _toast('Opening call in browser...');
+    final ok = await ExternalLinkService.openUrl(url);
+    if (!ok) {
       if (!mounted) return;
       _toast('Could not open browser.');
     }
@@ -267,8 +267,39 @@ class _BottomNavStripState extends State<BottomNavStrip> {
       return;
     }
 
-    final picked = await _pickConversation(convs);
+    final callKind = await showModalBottomSheet<_CallKind>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(Icons.call_outlined),
+                title: const Text('Audio call'),
+                onTap: () => Navigator.pop(ctx, _CallKind.audio),
+              ),
+              ListTile(
+                leading: const Icon(Icons.videocam_outlined),
+                title: const Text('Video call'),
+                onTap: () => Navigator.pop(ctx, _CallKind.video),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (callKind == null) return;
+
+    final picked = await _pickConversations(convs);
     if (picked == null) return;
+    if (picked.conversations.isEmpty && picked.externalInvitees.isEmpty) {
+      _toast('Pick at least one recipient.');
+      return;
+    }
 
     if (!mounted) return;
     final date = await showDatePicker(
@@ -290,24 +321,28 @@ class _BottomNavStripState extends State<BottomNavStrip> {
     final title = await _promptTextInput(title: 'Call title', hint: 'Title');
     if (title == null || title.trim().isEmpty) return;
 
-    if (!mounted) return;
-    final external = await _promptTextInput(
-      title: 'External invite (optional)',
-      hint: 'Email or name',
-    );
-
     final start = DateTime(date.year, date.month, date.day, time.hour, time.minute);
     final end = start.add(const Duration(hours: 1));
-    final room = 'veil_${picked.id}';
-    final joinUrl = 'https://meet.jit.si/$room';
+    final room = picked.conversations.isNotEmpty
+        ? 'veil_${picked.conversations.first.id}'
+        : 'veil_${DateTime.now().millisecondsSinceEpoch}';
+    final subject = Uri.encodeComponent(title.trim());
+    final joinUrl = 'https://meet.jit.si/$room'
+        '#config.startWithVideoMuted=${callKind == _CallKind.video ? 'false' : 'true'}'
+        '&config.startWithAudioMuted=false'
+        '&config.subject=$subject';
+    final kindLabel = switch (callKind) {
+      _CallKind.audio => 'Audio',
+      _CallKind.video => 'Video',
+    };
 
     final ics = _buildIcsEvent(
       title: title.trim(),
       start: start,
       end: end,
       location: joinUrl,
-      notes: 'Join: $joinUrl',
-      externalInvitee: (external ?? '').trim(),
+      notes: 'Call type: $kindLabel\nJoin: $joinUrl',
+      externalInvitees: picked.externalInvitees,
     );
 
     final fileName = _safeFileName(
@@ -348,30 +383,38 @@ class _BottomNavStripState extends State<BottomNavStrip> {
     );
     if (action == null) return;
 
-    final joinText = 'Join Veil call: $joinUrl';
+    final joinText = 'Join Veil $kindLabel call: $joinUrl';
 
-    if (action == _ScheduleAction.sendVeil) {
-      final att = await AttachmentStore.importFromBytes(
-        conversationId: picked.id,
-        bytes: utf8.encode(ics),
-        fileName: fileName,
-        mimeType: 'text/calendar',
-      );
-      if (!mounted) return;
-      if (att == null) {
-        _toast('Could not attach invite.');
+      if (action == _ScheduleAction.sendVeil) {
+        if (picked.conversations.isEmpty) {
+          _toast('No Veil recipients selected.');
+          return;
+        }
+        var sent = 0;
+        for (final c in picked.conversations) {
+          final att = await AttachmentStore.importFromBytes(
+            conversationId: c.id,
+            bytes: utf8.encode(ics),
+            fileName: fileName,
+            mimeType: 'text/calendar',
+          );
+          if (att == null) continue;
+          await _repo.sendMessage(
+            conversationId: c.id,
+            text: joinText,
+            isMe: true,
+            attachmentRef: att,
+          );
+          sent += 1;
+        }
+        if (!mounted) return;
+        if (sent == 0) {
+          _toast('Could not attach invite.');
+        } else {
+          _toast('Invite sent to $sent chat${sent == 1 ? '' : 's'}.');
+        }
         return;
       }
-      await _repo.sendMessage(
-        conversationId: picked.id,
-        text: joinText,
-        isMe: true,
-        attachmentRef: att,
-      );
-      if (!mounted) return;
-      _toast('Invite sent.');
-      return;
-    }
 
     if (action == _ScheduleAction.save) {
       final dir = await Directory.systemTemp.createTemp('veil_invite_');
@@ -464,7 +507,7 @@ class _BottomNavStripState extends State<BottomNavStrip> {
     required DateTime end,
     String? location,
     String? notes,
-    String? externalInvitee,
+    List<String> externalInvitees = const [],
   }) {
     final uid = 'veil_${DateTime.now().millisecondsSinceEpoch}@veil';
     final lines = <String>[
@@ -486,9 +529,10 @@ class _BottomNavStripState extends State<BottomNavStrip> {
     if (desc.isNotEmpty) {
       lines.add('DESCRIPTION:${_icsEscape(desc)}');
     }
-    final invitee = (externalInvitee ?? '').trim();
-    if (invitee.isNotEmpty) {
-      lines.add('ATTENDEE;CN=${_icsEscape(invitee)}:MAILTO:$invitee');
+    for (final invitee in externalInvitees) {
+      final clean = invitee.trim();
+      if (clean.isEmpty) continue;
+      lines.add('ATTENDEE;CN=${_icsEscape(clean)}:MAILTO:$clean');
     }
     lines.add('END:VEVENT');
     lines.add('END:VCALENDAR');
@@ -614,6 +658,79 @@ class _BottomNavStripState extends State<BottomNavStrip> {
     );
   }
 
+  Future<_RecipientSelection?> _pickConversations(List<Conversation> convs) async {
+    final picked = <String>{};
+    var externalRaw = '';
+    return showDialog<_RecipientSelection>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Send invite to'),
+          content: SizedBox(
+            width: 520,
+            height: 420,
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: convs.length,
+                    itemBuilder: (_, i) {
+                      final c = convs[i];
+                      final title =
+                          c.title.trim().isEmpty ? 'Conversation' : c.title.trim();
+                      final checked = picked.contains(c.id);
+                      return CheckboxListTile(
+                        value: checked,
+                        onChanged: (v) {
+                          if (v == true) {
+                            picked.add(c.id);
+                          } else {
+                            picked.remove(c.id);
+                          }
+                          (ctx as Element).markNeedsBuild();
+                        },
+                        title: Text(title, overflow: TextOverflow.ellipsis),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  decoration: const InputDecoration(
+                    labelText: 'External recipients (optional)',
+                    hintText: 'email1@domain.com, email2@domain.com',
+                  ),
+                  onChanged: (v) => externalRaw = v,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final selected =
+                    convs.where((c) => picked.contains(c.id)).toList();
+                final externals = _parseExternalInvitees(externalRaw);
+                Navigator.pop(
+                  ctx,
+                  _RecipientSelection(
+                    conversations: selected,
+                    externalInvitees: externals,
+                  ),
+                );
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -633,8 +750,8 @@ class _BottomNavStripState extends State<BottomNavStrip> {
           onTap: onTap,
           borderRadius: BorderRadius.circular(999),
           child: Container(
-            width: 44,
-            height: 44,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: selected
                   ? scheme.primary.withAlpha((0.12 * 255).round())
@@ -659,19 +776,36 @@ class _BottomNavStripState extends State<BottomNavStrip> {
           : null,
     );
 
+      final isNarrow = MediaQuery.of(context).size.width < 600;
+      final reservedDockWidth = (!isNarrow && widget.dock != null) ? 210.0 : 0.0;
+      final dockHeight = isNarrow ? 60.0 : 72.0;
     return SafeArea(
       top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          border: Border(
-            top: BorderSide(color: border),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final barWidth =
+              (constraints.maxWidth - reservedDockWidth).clamp(0.0, constraints.maxWidth);
+          return SizedBox(
+            width: double.infinity,
+            height: dockHeight,
+            child: Stack(
+              children: [
+                Align(
+                  alignment: Alignment.bottomLeft,
+                  child: SizedBox(
+                    width: barWidth,
+                      child: Container(
+                        height: dockHeight,
+                        padding: EdgeInsets.fromLTRB(isNarrow ? 4 : 8, 8, isNarrow ? 4 : 8, 10),
+                        decoration: BoxDecoration(
+                          color: scheme.surface,
+                          border: Border(
+                            top: BorderSide(color: border),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: isNarrow ? MainAxisAlignment.spaceEvenly : MainAxisAlignment.spaceBetween,
+                          children: [
             bubble(
               child: avatar,
               tooltip: 'Profile',
@@ -679,41 +813,90 @@ class _BottomNavStripState extends State<BottomNavStrip> {
               onTap: () => _goTo(AppRoutes.onboarding),
             ),
             bubble(
+              child: Icon(Icons.photo_camera_outlined, color: muted),
+              tooltip: 'Camera',
+              selected: widget.current == BottomNavTab.camera,
+              onTap: _cameraFlow,
+            ),
+            bubble(
               child: Icon(Icons.call_outlined, color: muted),
               tooltip: 'Call',
               selected: widget.current == BottomNavTab.calls,
               onTap: _callFlow,
             ),
-            bubble(
-              child: Icon(Icons.chat_bubble_outline, color: muted),
-              tooltip: 'Chats',
-              selected: widget.current == BottomNavTab.chats,
-              onTap: () => _goTo(AppRoutes.inbox),
-            ),
-            bubble(
-              child: Icon(Icons.people_outline, color: muted),
-              tooltip: 'Contacts',
-              selected: widget.current == BottomNavTab.contacts,
-              onTap: () => _goTo(AppRoutes.contacts),
-            ),
+              bubble(
+                child: Icon(Icons.chat_bubble_outline, color: muted),
+                tooltip: 'Chats',
+                selected: widget.current == BottomNavTab.chats,
+                onTap: () => _goTo(AppRoutes.inbox),
+              ),
+              if (isNarrow)
+                bubble(
+                  child: _badgeIcon(Icons.storefront_outlined, muted, scheme),
+                  tooltip: 'Social',
+                  selected: false,
+                  onTap: () => _goTo(AppRoutes.vetrine),
+                ),
+              bubble(
+                child: Icon(Icons.people_outline, color: muted),
+                tooltip: 'Contacts',
+                selected: widget.current == BottomNavTab.contacts,
+                onTap: () => _goTo(AppRoutes.contacts),
+              ),
             bubble(
               child: Icon(Icons.calendar_today_outlined, color: muted),
               tooltip: 'Schedule call',
               selected: widget.current == BottomNavTab.calendar,
               onTap: _scheduleCallFlow,
             ),
-            bubble(
-              child: Icon(Icons.photo_camera_outlined, color: muted),
-              tooltip: 'Camera',
-              selected: widget.current == BottomNavTab.camera,
-              onTap: _cameraFlow,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                  if (!isNarrow && widget.dock != null)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      width: reservedDockWidth,
+                      height: dockHeight,
+                    child: Align(
+                      alignment: Alignment.bottomRight,
+                      child: widget.dock!,
+                    ),
+                  ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
+    }
   }
-}
+
+  Widget _badgeIcon(IconData icon, Color iconColor, ColorScheme scheme) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(icon, color: iconColor),
+        Positioned(
+          right: -2,
+          top: -2,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: BoxDecoration(
+              color: scheme.primary.withAlpha((0.18 * 255).round()),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '2',
+              style: TextStyle(color: scheme.onSurface, fontSize: 9),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
 enum _CameraAction {
   sendVeil,
@@ -729,4 +912,27 @@ enum _ScheduleAction {
 enum _CallAction {
   audio,
   video,
+}
+
+enum _CallKind {
+  audio,
+  video,
+}
+
+class _RecipientSelection {
+  _RecipientSelection({
+    required this.conversations,
+    required this.externalInvitees,
+  });
+
+  final List<Conversation> conversations;
+  final List<String> externalInvitees;
+}
+
+List<String> _parseExternalInvitees(String raw) {
+  return raw
+      .split(RegExp(r'[;,]'))
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList(growable: false);
 }

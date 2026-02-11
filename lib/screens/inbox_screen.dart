@@ -15,6 +15,7 @@ import '../screens/hidden_panel.dart';
 import '../security/unlock_profile.dart';
 import '../widgets/background_scaffold.dart';
 import '../widgets/bottom_nav_strip.dart';
+import '../widgets/mini_presence_dock.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -485,6 +486,11 @@ class _InboxScreenState extends State<InboxScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Hub',
+            onPressed: () => Navigator.pushNamed(context, AppRoutes.hub),
+            icon: Icon(Icons.dashboard_customize_outlined, color: fg),
+          ),
           if (_showHidden && !_showArchived)
             SizedBox(
               width: 72,
@@ -537,7 +543,10 @@ class _InboxScreenState extends State<InboxScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: const BottomNavStrip(current: BottomNavTab.chats),
+      bottomNavigationBar: const BottomNavStrip(
+        current: BottomNavTab.chats,
+        dock: MiniPresenceDock(mode: PresenceMode.messaging, compact: true),
+      ),
       child: Stack(
         children: [
           FutureBuilder<List<Conversation>>(

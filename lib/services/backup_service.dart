@@ -13,6 +13,9 @@ class BackupService {
 
   static const int version = 1;
   static String? lastExportPath;
+  static const String _kLastExportAt = 'veil_backup_last_export_at_v1';
+  static const String _kLastImportAt = 'veil_backup_last_import_at_v1';
+  static const String _kLastExportPath = 'veil_backup_last_export_path_v1';
 
   // Keys used by the app
   static const String _kContacts = 'veil_contacts_v2';
@@ -32,6 +35,9 @@ class BackupService {
 
       final suggestedName = _suggestedFileName();
       final ok = await _savePayloadAs(payload, suggestedName: suggestedName);
+      if (ok) {
+        await _setLastExport(DateTime.now());
+      }
       await AuditLogService.I.log(
         'backup_export_full',
         status: ok ? 'ok' : 'failed',
@@ -48,6 +54,9 @@ class BackupService {
       final payload = await _buildContactsOnlyPayload();
       final suggestedName = _suggestedFileName(prefix: 'veil_contacts_backup');
       final ok = await _savePayloadAs(payload, suggestedName: suggestedName);
+      if (ok) {
+        await _setLastExport(DateTime.now());
+      }
       await AuditLogService.I.log(
         'backup_export_contacts',
         status: ok ? 'ok' : 'failed',
@@ -68,6 +77,9 @@ class BackupService {
       final suggestedName =
           _suggestedFileName(prefix: 'veil_conversation_backup');
       final ok = await _savePayloadAs(payload, suggestedName: suggestedName);
+      if (ok) {
+        await _setLastExport(DateTime.now());
+      }
       await AuditLogService.I.log(
         'backup_export_conversation',
         status: ok ? 'ok' : 'failed',
@@ -112,6 +124,7 @@ class BackupService {
 
     await xf.saveTo(location.path);
     lastExportPath = location.path;
+    await LocalStorage.setString(_kLastExportPath, location.path);
 
     // verify file exists (best-effort)
     try {
@@ -151,6 +164,7 @@ class BackupService {
       final file = File(outPath);
       await file.writeAsBytes(bytes, flush: true);
       lastExportPath = outPath;
+      await LocalStorage.setString(_kLastExportPath, outPath);
 
       if (!await file.exists()) return false;
       return true;
@@ -374,6 +388,9 @@ class BackupService {
       final decoded = _decodeBackup(bytes);
       if (decoded == null) return false;
       final ok = await _applyImportDecoded(decoded, mode: mode);
+      if (ok) {
+        await _setLastImport(DateTime.now());
+      }
       await AuditLogService.I.log(
         'backup_import_full',
         status: ok ? 'ok' : 'failed',
@@ -398,6 +415,9 @@ class BackupService {
       final decoded = _decodeBackup(bytes);
       if (decoded == null) return false;
       final ok = await _applyImportContactsOnly(decoded, mode: mode);
+      if (ok) {
+        await _setLastImport(DateTime.now());
+      }
       await AuditLogService.I.log(
         'backup_import_contacts',
         status: ok ? 'ok' : 'failed',
@@ -458,6 +478,9 @@ class BackupService {
       final decoded = _decodeBackup(bytes);
       if (decoded == null) return false;
       final ok = await _applyImportConversationsOnly(decoded, mode: mode);
+      if (ok) {
+        await _setLastImport(DateTime.now());
+      }
       await AuditLogService.I.log(
         'backup_import_conversations',
         status: ok ? 'ok' : 'failed',
@@ -532,6 +555,37 @@ class BackupService {
       fileName: fileName,
       byteLength: byteLength,
     );
+  }
+
+  static Future<BackupPreview> buildLocalPreview() async {
+    final payload = await _buildBackupPayload();
+    return _buildPreviewFromDecoded(payload);
+  }
+
+  static DateTime? getLastExportAt() {
+    final raw = LocalStorage.getString(_kLastExportAt);
+    if (raw == null || raw.trim().isEmpty) return null;
+    return DateTime.tryParse(raw.trim());
+  }
+
+  static DateTime? getLastImportAt() {
+    final raw = LocalStorage.getString(_kLastImportAt);
+    if (raw == null || raw.trim().isEmpty) return null;
+    return DateTime.tryParse(raw.trim());
+  }
+
+  static String? getLastExportPath() {
+    final raw = LocalStorage.getString(_kLastExportPath);
+    if (raw == null || raw.trim().isEmpty) return null;
+    return raw.trim();
+  }
+
+  static Future<void> _setLastExport(DateTime when) async {
+    await LocalStorage.setString(_kLastExportAt, when.toIso8601String());
+  }
+
+  static Future<void> _setLastImport(DateTime when) async {
+    await LocalStorage.setString(_kLastImportAt, when.toIso8601String());
   }
 
   static int _countListFromRawJson(String raw) {

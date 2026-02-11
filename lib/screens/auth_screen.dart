@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../data/local_storage.dart';
 import '../routes/app_routes.dart';
 import '../security/secure_gate.dart';
 import '../security/unlock_service.dart';
@@ -18,6 +19,18 @@ class _AuthScreenState extends State<AuthScreen> {
   final _passCtrl = TextEditingController();
   bool _busy = false;
   String? _error;
+  static const String _kLastEmail = 'veil_last_email';
+  static final RegExp _emailRx =
+      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+  @override
+  void initState() {
+    super.initState();
+    final saved = LocalStorage.getString(_kLastEmail);
+    if (saved != null && saved.trim().isNotEmpty) {
+      _emailCtrl.text = saved;
+    }
+  }
 
   @override
   void dispose() {
@@ -39,10 +52,19 @@ class _AuthScreenState extends State<AuthScreen> {
         setState(() => _error = 'Email and password required.');
         return;
       }
+      if (!_emailRx.hasMatch(email)) {
+        setState(() => _error = 'Please enter a valid email.');
+        return;
+      }
+      if (pass.length < 6) {
+        setState(() => _error = 'Password must be at least 6 characters.');
+        return;
+      }
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email,
         password: pass,
       );
+      await LocalStorage.setString(_kLastEmail, email);
       await _goNext();
     } on FirebaseAuthException catch (e) {
       setState(() => _error = e.message ?? 'Sign-in failed.');
@@ -64,10 +86,19 @@ class _AuthScreenState extends State<AuthScreen> {
         setState(() => _error = 'Email and password required.');
         return;
       }
+      if (!_emailRx.hasMatch(email)) {
+        setState(() => _error = 'Please enter a valid email.');
+        return;
+      }
+      if (pass.length < 6) {
+        setState(() => _error = 'Password must be at least 6 characters.');
+        return;
+      }
       await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: pass,
       );
+      await LocalStorage.setString(_kLastEmail, email);
       await _goNext();
     } on FirebaseAuthException catch (e) {
       setState(() => _error = e.message ?? 'Registration failed.');

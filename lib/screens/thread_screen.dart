@@ -29,9 +29,11 @@ import '../security/unlock_profile.dart';
 import '../security/unlock_service.dart';
 import '../services/attachment_store.dart';
 import '../services/draft_store.dart';
+import '../services/external_link_service.dart';
 import '../widgets/background_scaffold.dart';
 import '../widgets/hidden_panel.dart';
 import '../widgets/bottom_nav_strip.dart';
+import '../widgets/mini_presence_dock.dart';
 import '../services/firebase_backend.dart';
 import '../services/remote_backend.dart';
 
@@ -1769,19 +1771,12 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
   }
 
   Future<void> _openExternalUrl(String url) async {
-    try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Opening call in browser...')),
-      );
-      if (Platform.isWindows) {
-        await Process.start('cmd', ['/c', 'start', '', url], runInShell: true);
-      } else if (Platform.isMacOS) {
-        await Process.start('open', [url]);
-      } else if (Platform.isLinux) {
-        await Process.start('xdg-open', [url]);
-      }
-    } catch (_) {
-      if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Opening call in browser...')),
+    );
+    final ok = await ExternalLinkService.openUrl(url);
+    if (!mounted) return;
+    if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open browser.')),
       );
@@ -1917,8 +1912,11 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
       },
       child: BackgroundScaffold(
         style: VeilBackgroundStyle.thread,
-        bottomNavigationBar: const BottomNavStrip(current: BottomNavTab.chats),
-        appBar: AppBar(
+      bottomNavigationBar: const BottomNavStrip(
+        current: BottomNavTab.chats,
+        dock: MiniPresenceDock(mode: PresenceMode.messaging, compact: true),
+      ),
+      appBar: AppBar(
           title: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onDoubleTap: _unlockProfile.doubleTapTitle ? _openHiddenPanel : null,
@@ -2327,16 +2325,36 @@ class _ThreadScreenState extends State<ThreadScreen> with WidgetsBindingObserver
                 onPressed: _openAttachmentMenu,
                 icon: Icon(Icons.add, color: muted),
               ),
-              IconButton(
-                tooltip: 'Send to Hidden Inbox',
-                onPressed: () {
-                  setState(() => _sendHiddenNext = !_sendHiddenNext);
-                },
-                icon: Icon(
-                  _sendHiddenNext ? Icons.visibility_off : Icons.visibility_off_outlined,
-                  color: _sendHiddenNext ? Theme.of(context).colorScheme.primary : muted,
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'To Hidden',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                      onPressed: () {
+                        setState(() => _sendHiddenNext = !_sendHiddenNext);
+                      },
+                      icon: Icon(
+                        _sendHiddenNext ? Icons.visibility_off : Icons.visibility_off_outlined,
+                        color: _sendHiddenNext
+                            ? Theme.of(context).colorScheme.primary
+                            : muted,
+                        size: 20,
+                      ),
+                    ),
+                    Text(
+                      _sendHiddenNext ? 'To Hidden Inbox' : 'To Inbox',
+                      style: TextStyle(
+                        color: _sendHiddenNext
+                            ? Theme.of(context).colorScheme.primary
+                            : muted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
               Expanded(
                 child: TextField(
                   controller: _composerCtrl,

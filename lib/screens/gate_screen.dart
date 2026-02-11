@@ -9,6 +9,7 @@ import '../security/biometric_auth_service.dart';
 import '../security/unlock_service.dart';
 import '../security/secure_gate.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../services/firebase_backend.dart';
 
 class GateScreen extends StatefulWidget {
   const GateScreen({super.key});
@@ -72,6 +73,12 @@ class _GateScreenState extends State<GateScreen> {
           Platform.isMacOS ||
           Platform.isWindows;
       if (firebaseSupported) {
+        try {
+          await FirebaseBackend.I.init();
+        } catch (_) {
+          // If Firebase init fails, fall back to auth screen so user can retry.
+        }
+        if (!mounted) return;
         final currentUser = FirebaseAuth.instance.currentUser;
         if (currentUser == null) {
           Navigator.pushNamedAndRemoveUntil(context, AppRoutes.auth, (r) => false);

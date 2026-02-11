@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../firebase_options.dart';
+import 'app_logger.dart';
 import '../data/local_storage.dart';
 
 class NotificationService {
@@ -31,7 +32,9 @@ class NotificationService {
         await Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
         );
-      } catch (_) {}
+      } catch (e, st) {
+        AppLogger.w('Firebase init failed in notifications', error: e, stackTrace: st);
+      }
     }
 
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -63,7 +66,9 @@ class NotificationService {
 
     try {
       await refreshToken();
-    } catch (_) {}
+    } catch (e, st) {
+      AppLogger.w('FCM token refresh failed', error: e, stackTrace: st);
+    }
 
     _initialized = true;
   }
@@ -183,7 +188,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-    } catch (_) {}
+    } catch (e, st) {
+      AppLogger.w('Firebase init failed in background handler', error: e, stackTrace: st);
+    }
   }
   await NotificationService.I._showLocalForMessage(message);
 }

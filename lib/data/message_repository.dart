@@ -11,6 +11,7 @@ import '../services/attachment_store.dart';
 import '../services/cover_ai_service.dart';
 import '../services/firebase_backend.dart';
 import '../services/remote_backend.dart';
+import '../services/app_logger.dart';
 import 'contact_repository.dart';
 import 'conversation_store.dart';
 import 'message_events.dart';
@@ -159,7 +160,9 @@ class MessageRepository {
           await FirebaseBackend.I.sendMessage(remote);
         }
       }
-    } catch (_) {}
+    } catch (e, st) {
+      AppLogger.w('Remote send failed', error: e, stackTrace: st);
+    }
 
     await Future.delayed(const Duration(milliseconds: 250));
     final updated = msg.copyWith(status: 'sent');
@@ -632,14 +635,14 @@ class MessageRepository {
           'Confermato, tengo traccia e condivido update.',
           'Va bene, coordino il prossimo passo su $topic.',
           'Ricevuto, faccio un check rapido e torno da te.',
-          'Perfetto, gestisco io e ti scrivo più tardi.',
+          'Perfect, I will handle it and message you later.',
         ];
       }
       return <String>[
         'Ok, ricevuto su $topic.',
         'Perfetto, resto allineato.',
         'Chiaro, grazie per l’update.',
-        'Confermato, procediamo così.',
+        'Confirmed, let us proceed this way.',
         'Ricevuto, tengo monitorato.',
         'Ok, ci sentiamo $when per il punto.',
         'Tutto chiaro, aggiorno il team.',
@@ -651,12 +654,12 @@ class MessageRepository {
       return <String>[
         'Ok, ci penso io $when.',
         'Perfetto, poi aggiorno $person.',
-        'Va bene, facciamo così su $topic.',
+        'Sounds good, let us do it this way for $topic.',
         'Ricevuto, ti scrivo appena riesco.',
         'Ci sta, controllo e ti dico dopo.',
         'Ok, intanto sistemo questa cosa.',
         'Perfetto, passo io e poi ti faccio sapere.',
-        'Va benissimo, ci aggiorniamo più tardi.',
+        'Great, we will catch up later.',
       ];
     }
 
@@ -665,7 +668,7 @@ class MessageRepository {
       'Va bene, grazie.',
       'Chiaro, ricevuto.',
       'Tutto ok, ci sentiamo $when.',
-      'Perfetto, allora andiamo così.',
+      'Perfect, then we will proceed this way.',
       'Ricevuto 👍',
       'Va bene $person, ci sta.',
       'Ok, ottimo su $topic.',
@@ -831,7 +834,7 @@ class MessageRepository {
     final h = DateTime.now().hour;
     if (h < 12) return 'in mattinata';
     if (h < 18) return 'nel pomeriggio';
-    return 'più tardi';
+    return 'later';
   }
 
   Future<List<String>> _loadCoverHistory(String conversationId) async {

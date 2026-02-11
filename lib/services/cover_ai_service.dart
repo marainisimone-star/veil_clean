@@ -42,6 +42,7 @@ class CoverAiService {
 
   static const String _kSettings = 'veil_cover_ai_settings_v1';
   static const String _kLangPrefix = 'veil_cover_lang_';
+  static const String _kLangStatePrefix = 'veil_cover_lang_state_';
 
   Future<CoverAiSettings> loadSettings() async {
     final raw = LocalStorage.getString(_kSettings);
@@ -79,7 +80,8 @@ class CoverAiService {
       if (last != null) return last;
       if (fallback == 'it' || fallback == 'en') return fallback!;
     }
-    return detectLanguage(text);
+    final detected = detectLanguage(text);
+    return _updateLangState(conversationId, detected);
   }
 
   /// Genera cover localmente (nessuna API). Ritorna null se disabilitato.
@@ -139,6 +141,7 @@ class CoverAiService {
   }
 
   String _keyLastLang(String conversationId) => '$_kLangPrefix$conversationId';
+  String _keyLangState(String conversationId) => '$_kLangStatePrefix$conversationId';
 
   String? _getLastLang(String conversationId) {
     final v = LocalStorage.getString(_keyLastLang(conversationId));
@@ -150,6 +153,63 @@ class CoverAiService {
   void _setLastLang(String conversationId, String lang) {
     if (lang != 'it' && lang != 'en') return;
     LocalStorage.setString(_keyLastLang(conversationId), lang);
+  }
+
+  String _updateLangState(String conversationId, String detected) {
+    if (detected != 'it' && detected != 'en') return detected;
+
+    final stateRaw = LocalStorage.getString(_keyLangState(conversationId));
+    Map<String, dynamic> state;
+    if (stateRaw == null || stateRaw.trim().isEmpty) {
+      state = <String, dynamic>{};
+    } else {
+      try {
+        state = jsonDecode(stateRaw) as Map<String, dynamic>;
+      } catch (_) {
+        state = <String, dynamic>{};
+      }
+    }
+
+    final last = (state['last'] ?? _getLastLang(conversationId) ?? '').toString();
+    final candidate = (state['candidate'] ?? '').toString();
+    final candidateCount = (state['candidateCount'] is int)
+        ? state['candidateCount'] as int
+        : int.tryParse(state['candidateCount']?.toString() ?? '') ?? 0;
+
+    String newLast = last;
+    String newCandidate = candidate;
+    int newCandidateCount = candidateCount;
+
+    if (last.isEmpty) {
+      newLast = detected;
+      newCandidate = '';
+      newCandidateCount = 0;
+    } else if (detected == last) {
+      newCandidate = '';
+      newCandidateCount = 0;
+    } else {
+      if (candidate == detected) {
+        newCandidateCount = candidateCount + 1;
+      } else {
+        newCandidate = detected;
+        newCandidateCount = 1;
+      }
+      if (newCandidateCount >= 2) {
+        newLast = detected;
+        newCandidate = '';
+        newCandidateCount = 0;
+      }
+    }
+
+    _setLastLang(conversationId, newLast);
+    final nextState = <String, dynamic>{
+      'last': newLast,
+      'candidate': newCandidate,
+      'candidateCount': newCandidateCount,
+    };
+    LocalStorage.setString(_keyLangState(conversationId), jsonEncode(nextState));
+
+    return newLast.isEmpty ? detected : newLast;
   }
 
 
@@ -292,7 +352,7 @@ class CoverAiService {
     if (lang == 'it') {
       if (h < 12) return 'in mattinata';
       if (h < 18) return 'nel pomeriggio';
-      return 'più tardi';
+      return 'later';
     }
     if (h < 12) return 'this morning';
     if (h < 18) return 'this afternoon';
@@ -356,7 +416,7 @@ class CoverAiService {
         'Ok, ricevuto su $topic.',
         'Perfetto, resto allineato.',
         'Chiaro, grazie per l’update.',
-        'Confermato, procediamo così.',
+        'Confirmed, let us proceed this way.',
       ];
     }
 
@@ -364,7 +424,7 @@ class CoverAiService {
       return <String>[
         'Ok, ci penso io $when.',
         'Perfetto, poi aggiorno $person.',
-        'Va bene, facciamo così su $topic.',
+        'Sounds good, let us do it this way for $topic.',
         'Ricevuto, ti scrivo appena riesco.',
       ];
     }

@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import '../firebase_options.dart';
+import 'app_logger.dart';
 import 'remote_backend.dart';
 
 class FirebaseBackend implements RemoteBackend {
@@ -26,9 +27,14 @@ class FirebaseBackend implements RemoteBackend {
       _initialized = true;
       return;
     }
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } catch (e, st) {
+      AppLogger.e('Firebase init failed', error: e, stackTrace: st);
+      rethrow;
+    }
     _initialized = true;
   }
 

@@ -21,6 +21,9 @@ class BackgroundScaffold extends StatelessWidget {
     this.bottomNavigationBar,
     this.padding,
     this.safeArea = true,
+    this.useGradient = true,
+    this.useOverlay = true,
+    this.backgroundColor,
   });
 
   final Widget child;
@@ -32,46 +35,65 @@ class BackgroundScaffold extends StatelessWidget {
 
   final EdgeInsetsGeometry? padding;
   final bool safeArea;
+  final bool useGradient;
+  final bool useOverlay;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
     final bg = _backgroundFor(style);
 
-    Widget body = Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: bg.colors,
-          stops: bg.stops,
-        ),
-      ),
-        child: Container(
-          // Overlay leggero per coerenza e leggibilità.
-          // (NO withOpacity: usiamo withAlpha per evitare deprecation)
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-              Colors.white.withAlpha((0.35 * 255).round()),
-              Colors.white.withAlpha((0.10 * 255).round()),
-              ],
-            ),
+    Widget body;
+    if (useGradient) {
+      body = Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: bg.colors,
+            stops: bg.stops,
           ),
-          child: Padding(
-            padding: padding ?? EdgeInsets.zero,
-            child: child,
         ),
-      ),
-    );
+        child: useOverlay
+            ? Container(
+                // Overlay leggero per coerenza e leggibilità.
+                // (NO withOpacity: usiamo withAlpha per evitare deprecation)
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.white.withAlpha((0.35 * 255).round()),
+                      Colors.white.withAlpha((0.10 * 255).round()),
+                    ],
+                  ),
+                ),
+                child: Padding(
+                  padding: padding ?? EdgeInsets.zero,
+                  child: child,
+                ),
+              )
+            : Padding(
+                padding: padding ?? EdgeInsets.zero,
+                child: child,
+              ),
+      );
+    } else {
+      body = Container(
+        color: backgroundColor ?? Colors.transparent,
+        child: Padding(
+          padding: padding ?? EdgeInsets.zero,
+          child: child,
+        ),
+      );
+    }
 
     if (safeArea) {
       body = SafeArea(child: body);
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F4F0),
+      backgroundColor: backgroundColor ?? const Color(0xFFF6F4F0),
       appBar: appBar,
       body: body,
       bottomNavigationBar: bottomNavigationBar,

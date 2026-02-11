@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 
 import '../models/conversation.dart';
+import '../models/vetrina.dart';
 import '../routes/app_routes.dart';
 
 import '../screens/gate_screen.dart';
@@ -11,6 +12,11 @@ import '../screens/inbox_screen.dart';
 import '../screens/thread_screen.dart';
 import '../screens/contacts_screen.dart';
 import '../screens/new_conversation_screen.dart';
+import '../screens/home_hub_screen.dart';
+import '../screens/vetrina_feed_screen.dart';
+import '../screens/vetrina_detail_screen.dart';
+import '../screens/vetrina_create_screen.dart';
+import '../screens/backup_status_screen.dart';
 import '../security/panic_lock_screen.dart';
 import '../security/panic_controller.dart';
 
@@ -57,6 +63,34 @@ class AppRouter {
           );
         }
         return MaterialPageRoute(builder: (_) => const InboxScreen(), settings: settings);
+
+      case AppRoutes.vetrine:
+        return MaterialPageRoute(builder: (_) => const VetrinaFeedScreen(), settings: settings);
+
+      case AppRoutes.vetrinaDetail:
+        final arg = settings.arguments;
+        if (arg is Vetrina) {
+          return MaterialPageRoute(
+            builder: (_) => VetrinaDetailScreen(vetrinaId: arg.id, initial: arg),
+            settings: settings,
+          );
+        }
+        if (arg is String) {
+          return MaterialPageRoute(
+            builder: (_) => VetrinaDetailScreen(vetrinaId: arg),
+            settings: settings,
+          );
+        }
+        return MaterialPageRoute(builder: (_) => const VetrinaFeedScreen(), settings: settings);
+
+      case AppRoutes.vetrinaCreate:
+        return MaterialPageRoute(builder: (_) => const VetrinaCreateScreen(), settings: settings);
+
+      case AppRoutes.hub:
+        return MaterialPageRoute(builder: (_) => const HomeHubScreen(), settings: settings);
+
+      case AppRoutes.backupStatus:
+        return MaterialPageRoute(builder: (_) => const BackupStatusScreen(), settings: settings);
 
       default:
         // fallback

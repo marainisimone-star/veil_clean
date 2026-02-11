@@ -1133,12 +1133,19 @@ class _PanelSheetState extends State<_PanelSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _sectionTitle('Backup'),
-                    _actionTile(
-                      icon: Icons.save_alt,
-                      title: 'Backup (full)',
-                      subtitle: 'Save everything to a location you choose.',
-                      onTap: _busy ? null : _doBackup,
+                      _sectionTitle('Backup'),
+                      _actionTile(
+                        icon: Icons.security_outlined,
+                        title: 'Backup status',
+                        subtitle: 'See what is stored locally vs cloud.',
+                        onTap: _busy ? null : () => Navigator.pushNamed(context, AppRoutes.backupStatus),
+                      ),
+                      const SizedBox(height: 8),
+                      _actionTile(
+                        icon: Icons.save_alt,
+                        title: 'Backup (full)',
+                        subtitle: 'Save everything to a location you choose.',
+                        onTap: _busy ? null : _doBackup,
                     ),
                     const SizedBox(height: 8),
                     _actionTile(
